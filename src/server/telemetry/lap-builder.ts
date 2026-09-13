@@ -111,6 +111,11 @@ export class LapBuilder {
     return this.current?.invalid ?? false;
   }
 
+  /** The lap being driven now. Its arrays keep growing as ticks arrive. */
+  get currentTrace(): LapTrace | null {
+    return this.current?.trace ?? null;
+  }
+
   reset(): void {
     this.current = null;
     this.pending = null;

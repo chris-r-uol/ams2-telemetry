@@ -11,8 +11,9 @@ import { SessionsView } from './views/SessionsView.tsx';
 import { SessionView } from './views/SessionView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { SetupView } from './views/SetupView.tsx';
+import { CardLabView } from './views/CardLabView.tsx';
 
-type Section = 'live' | 'sessions' | 'compare' | 'coach' | 'setup' | 'settings';
+type Section = 'live' | 'sessions' | 'compare' | 'coach' | 'setup' | 'lab' | 'settings';
 
 const TITLES: Record<Section, string> = {
   live: 'Live',
@@ -20,6 +21,7 @@ const TITLES: Record<Section, string> = {
   compare: 'Compare laps',
   coach: 'Coach',
   setup: 'Car setup',
+  lab: 'Card lab',
   settings: 'Settings',
 };
 
@@ -41,6 +43,8 @@ function View({ route }: { route: Route }) {
       return <CoachView id={route.id} />;
     case 'setup':
       return <SetupView route={route} />;
+    case 'lab':
+      return <CardLabView />;
     case 'settings':
       return <SettingsView />;
   }
@@ -92,6 +96,7 @@ export function App() {
     { section: 'compare', to: { name: 'compare', session: liveSessionId, lap: null, refSession: null, refLap: null } },
     { section: 'coach', to: { name: 'coach', id: liveSessionId } },
     { section: 'setup', to: { name: 'setup', session: liveSessionId, lap: null, compare: null } },
+    { section: 'lab', to: { name: 'lab' } },
     { section: 'settings', to: { name: 'settings' } },
   ];
 

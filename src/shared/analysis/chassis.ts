@@ -766,6 +766,81 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
   return analysis;
 }
 
+/** 0 entry, 1 mid-corner (±15 m of the apex), 2 exit, -1 outside the corner. */
+function phaseIndex(c: Corner, d: number): number {
+  if (d >= c.entry && d < c.apex - 15) return 0;
+  if (Math.abs(d - c.apex) <= 15) return 1;
+  if (d > c.apex + 15 && d <= c.exit) return 2;
+  return -1;
+}
+
+function phaseBalance(b: { extra: number; need: number; samples: number }): PhaseBalance {
+  if (b.samples < 5 || b.need <= 0) return { ratio: null, verdict: null, samples: b.samples };
+  const ratio = b.extra / b.need;
+  return {
+    ratio,
+    verdict: ratio > CHASSIS.balance ? 'understeer' : ratio < -CHASSIS.balance ? 'oversteer' : 'neutral',
+    samples: b.samples,
+  };
+}
+
+export interface RunAnalysis {
+  phases: { entry: PhaseBalance; mid: PhaseBalance; exit: PhaseBalance };
+  slipAngle: number | null;
+  events: ChassisEvent[];
+  /** Distance of each sample and its balance ratio (+ understeer, NaN on straights). */
+  d: number[];
+  balance: number[];
+}
+
+/**
+ * One run through one corner, straight from the raw trace: balance per phase,
+ * peak slip angle and grip events. Used for mid-lap feedback, so it needs a
+ * calibration from earlier laps.
+ */
+export function analyseRun(
+  trace: LapTrace,
+  corner: Corner,
+  availability: ChannelAvailability,
+  calibration: ChassisCalibration,
+  lap: number,
+): RunAnalysis {
+  const indices: number[] = [];
+  for (let i = 0; i < trace.t.length; i++) {
+    if (trace.d[i] >= corner.entry - 5 && trace.d[i] <= corner.exit + 5) indices.push(i);
+  }
+  const slice = {} as Record<string, number[]>;
+  for (const [key, values] of Object.entries(trace) as [string, number[] | undefined][]) {
+    slice[key] = values && values.length === trace.t.length ? indices.map((i) => values[i]) : [];
+  }
+  const dl = deriveLap(
+    { summary: { lap, kind: 'flying' } as LapSummary, trace: slice as unknown as LapTrace },
+    availability,
+    calibration,
+  );
+  const events = dl.n > 1 ? detectEvents(dl, [corner], calibration.sampleRate ?? 60, [null, null, null, null]) : [];
+  const buckets = [0, 1, 2].map(() => ({ extra: 0, need: 0, samples: 0 }));
+  const balance = new Array<number>(dl.n).fill(NaN);
+  let slip = 0;
+  for (let i = 0; i < dl.n; i++) {
+    if (Number.isFinite(dl.slipAngle[i])) slip = Math.max(slip, dl.slipAngle[i]);
+    if (!Number.isFinite(dl.balance[i])) continue;
+    balance[i] = dl.balance[i] / Math.abs(dl.need[i]);
+    const phase = phaseIndex(corner, dl.d[i]);
+    if (phase < 0) continue;
+    buckets[phase].extra += dl.balance[i];
+    buckets[phase].need += Math.abs(dl.need[i]);
+    buckets[phase].samples++;
+  }
+  return {
+    phases: { entry: phaseBalance(buckets[0]), mid: phaseBalance(buckets[1]), exit: phaseBalance(buckets[2]) },
+    slipAngle: slip > 0 ? slip : null,
+    events,
+    d: dl.d,
+    balance,
+  };
+}
+
 function balanceByCorner(derived: DerivedLap[], corners: Corner[], events: ChassisEvent[]): CornerBalance[] {
   const flying = derived.filter((dl) => dl.lap.kind === 'flying');
   const source = flying.length ? flying : derived;
@@ -781,7 +856,7 @@ function balanceByCorner(derived: DerivedLap[], corners: Corner[], events: Chass
       const c = corners[ci];
       if (Number.isFinite(dl.slipAngle[i])) lapPeak[ci] = Math.max(lapPeak[ci], dl.slipAngle[i]);
       if (!Number.isFinite(dl.balance[i])) continue;
-      const phase = d >= c.entry && d < c.apex - 15 ? 0 : Math.abs(d - c.apex) <= 15 ? 1 : d > c.apex + 15 && d <= c.exit ? 2 : -1;
+      const phase = phaseIndex(c, d);
       if (phase < 0) continue;
       const bucket = sums[ci][phase];
       bucket.extra += dl.balance[i];
@@ -793,22 +868,12 @@ function balanceByCorner(derived: DerivedLap[], corners: Corner[], events: Chass
     });
   }
 
-  const phase = (b: { extra: number; need: number; samples: number }): PhaseBalance => {
-    if (b.samples < 5 || b.need <= 0) return { ratio: null, verdict: null, samples: b.samples };
-    const ratio = b.extra / b.need;
-    return {
-      ratio,
-      verdict: ratio > CHASSIS.balance ? 'understeer' : ratio < -CHASSIS.balance ? 'oversteer' : 'neutral',
-      samples: b.samples,
-    };
-  };
-
   return corners.map((c, ci) => ({
     cornerId: c.id,
     corner: c.name,
-    entry: phase(sums[ci][0]),
-    mid: phase(sums[ci][1]),
-    exit: phase(sums[ci][2]),
+    entry: phaseBalance(sums[ci][0]),
+    mid: phaseBalance(sums[ci][1]),
+    exit: phaseBalance(sums[ci][2]),
     slipAngle: median(slipPeaks[ci]),
     oversteerMoments: events.filter((e) => e.kind === 'oversteer' && e.corner === c.name).length,
     lockUps: events.filter((e) => e.kind === 'lock-up' && e.corner === c.name).length,

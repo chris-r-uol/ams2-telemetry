@@ -1425,3 +1425,720 @@ code {
   font-size: 0.8125rem;
   color: var(--ink-2);
 }
+
+/* ============ Live cards ============ */
+
+.live-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  container-type: inline-size;
+}
+
+.live-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+.live-card-head h2 {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.live-card-meta {
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.live-card.accent-slower {
+  border-left: 6px solid var(--bad);
+}
+
+.live-card.accent-faster {
+  border-left: 6px solid var(--good);
+}
+
+.live-card.accent-attention {
+  border-left: 6px solid var(--lap);
+  background: linear-gradient(var(--lap-wash), var(--lap-wash)), var(--surface);
+}
+
+.lc-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.lc-corner {
+  font-size: 2.25rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.is-glance .lc-corner {
+  font-size: clamp(2.5rem, 20cqi, 4rem);
+}
+
+.lc-delta {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.is-glance .lc-delta {
+  font-size: clamp(2rem, 15cqi, 3.25rem);
+}
+
+.lc-delta .delta-words {
+  font-size: 0.5em;
+  font-weight: 600;
+}
+
+.lc-delta-block {
+  display: grid;
+  justify-items: end;
+  gap: 0.1rem;
+  font-size: 0.875rem;
+}
+
+.lc-cue {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.is-glance .lc-cue {
+  font-size: clamp(1.35rem, 9cqi, 2rem);
+}
+
+.lc-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+
+.lc-facts dt {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.lc-facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lc-tip {
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.lc-tip p {
+  margin-top: 0.15rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.phase-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phase {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.phase-name {
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+
+.phase-verdict {
+  font-weight: 700;
+}
+
+/* Sized against each cell, so "Understeer" fits a narrow card. */
+.phase-strip.is-glance .phase {
+  container-type: inline-size;
+}
+
+.phase-strip.is-glance .phase-verdict {
+  font-size: clamp(0.8125rem, 15cqi, 1.3rem);
+}
+
+.phase-amount {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.phase.is-understeer {
+  border-color: var(--lap);
+  background: var(--lap-wash);
+}
+
+.phase.is-oversteer {
+  border-color: var(--brake);
+  background: var(--brake-wash);
+}
+
+.phase.is-unknown .phase-verdict {
+  color: var(--ink-muted);
+}
+
+.corner-profile {
+  margin: 0;
+}
+
+.corner-profile svg {
+  display: block;
+  overflow: visible;
+}
+
+.cp-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.cp-axis {
+  font-size: 11px;
+  fill: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cp-own {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.cp-best {
+  fill: none;
+  stroke: var(--reference);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.cp-marker-own line {
+  stroke: var(--ink-2);
+  stroke-width: 1.5;
+}
+
+.cp-marker-best line {
+  stroke: var(--reference);
+  stroke-width: 1.5;
+}
+
+.cp-marker-own text,
+.cp-marker-best text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ink-2);
+}
+
+.cp-band.is-understeer {
+  fill: var(--lap);
+}
+
+.cp-band.is-oversteer {
+  fill: var(--brake);
+}
+
+.cp-band.is-neutral {
+  fill: var(--surface-3);
+}
+
+.cp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.key-own {
+  color: var(--ink);
+}
+
+.swatch-neutral {
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.event-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.event-list li {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.event-icon {
+  width: 1.1rem;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.nc-countdown {
+  display: grid;
+  justify-items: end;
+  line-height: 1.1;
+}
+
+.nc-countdown-label {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.nc-countdown strong {
+  font-size: 1.75rem;
+}
+
+.is-glance .nc-countdown strong {
+  font-size: clamp(1.75rem, 13cqi, 2.75rem);
+}
+
+.countdown-track .meter-fill {
+  background: var(--lap);
+}
+
+.corner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.corner-chip {
+  display: grid;
+  justify-items: center;
+  min-width: 3.7rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.corner-chips.is-glance .corner-chip {
+  min-width: 4.4rem;
+  padding: 0.45rem 0.5rem;
+}
+
+.chip-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.chip-value {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.corner-chips.is-glance .chip-value {
+  font-size: 1.05rem;
+}
+
+.corner-chip.tone-slower {
+  background: var(--bad-wash);
+}
+
+.corner-chip.tone-faster {
+  background: var(--good-wash);
+}
+
+.corner-chip.is-now {
+  outline: 2px solid var(--lap);
+  outline-offset: 1px;
+}
+
+.corner-chip.is-next {
+  border-color: var(--lap);
+}
+
+.corner-chip.is-ahead .chip-value,
+.corner-chip.is-next .chip-value,
+.corner-chip.is-now .chip-value {
+  color: var(--ink-muted);
+}
+
+.chip-total {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.bm-word {
+  font-size: 1.75rem;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.is-glance .bm-word {
+  font-size: clamp(2rem, 15cqi, 3rem);
+}
+
+.bm-word.is-idle {
+  color: var(--ink-muted);
+}
+
+.bm-scale {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40% 20% 40%;
+  height: 1.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.is-glance .bm-scale {
+  height: 2.25rem;
+}
+
+.bm-zone.is-oversteer {
+  background: var(--brake-wash);
+}
+
+.bm-zone.is-neutral {
+  background: var(--surface-2);
+}
+
+.bm-zone.is-understeer {
+  background: var(--lap-wash);
+}
+
+.bm-needle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.bm-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+
+.grip-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grip-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.grip-count strong {
+  font-size: 1.25rem;
+}
+
+.grip-counts.is-glance .grip-count {
+  font-size: 1.05rem;
+}
+
+.grip-count.is-zero {
+  color: var(--ink-muted);
+}
+
+.grip-count.has-events {
+  background: var(--warning-wash);
+}
+
+.grip-clean,
+.cs-ok {
+  font-size: clamp(1.25rem, 8cqi, 1.75rem);
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.dp-hero {
+  font-size: 3rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.is-glance .dp-hero {
+  font-size: clamp(2.5rem, 19cqi, 5.5rem);
+}
+
+/* The word drops to its own line rather than spilling out of a narrow card. */
+.dp-hero .delta {
+  flex-wrap: wrap;
+}
+
+.dp-hero .delta-words {
+  font-size: 0.32em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.dp-facts {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.dp-facts div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.dp-facts dt {
+  color: var(--ink-2);
+}
+
+.dp-facts dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.ot-action {
+  font-size: 1.5rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.is-glance .ot-action {
+  font-size: clamp(1.6rem, 11cqi, 2.4rem);
+}
+
+.ot-corner {
+  color: var(--ink-2);
+}
+
+.ot-worth {
+  color: var(--ink-2);
+}
+
+.ot-more {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+}
+
+.lt-last {
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.is-glance .lt-last {
+  font-size: clamp(1.35rem, 9cqi, 1.8rem);
+}
+
+.lt-trend {
+  color: var(--ink-2);
+}
+
+.lap-bars svg {
+  display: block;
+  overflow: visible;
+}
+
+.lap-bar {
+  fill: var(--lap);
+}
+
+.lap-bar.is-invalid {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-width: 1.5;
+}
+
+.lap-best-dot {
+  fill: var(--good);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.lap-bars-base {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.lap-bars-label {
+  font-size: 11px;
+  fill: var(--ink-muted);
+}
+
+.lap-bars-value {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  color: var(--ink-2);
+}
+
+.cs-small {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-gear {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cs-speed {
+  font-weight: 600;
+}
+
+.cs-flag {
+  color: var(--warning-ink);
+  font-weight: 700;
+}
+
+.cs-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.car-status .cs-issues .badge,
+.is-glance .cs-issues .badge {
+  font-size: 0.875rem;
+}
+
+.mini-bar {
+  display: grid;
+  gap: 2px;
+  min-width: 4.5rem;
+  font-size: 0.75rem;
+}
+
+.mini-bar-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.mini-bar-fill {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  background: var(--ink-muted);
+}
+
+/* ============ Card lab ============ */
+
+.lab-intro {
+  max-width: 60rem;
+}
+
+.lab-hint {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--warning-wash);
+}
+
+.lab-item {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.25rem 0 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.lab-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.lab-item-head h2 {
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+.lab-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-weight: 750;
+}
+
+.lab-notes {
+  display: grid;
+  gap: 0.2rem;
+  max-width: 64rem;
+  color: var(--ink-2);
+}
+
+.lab-sizes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .lab-sizes {
+    grid-template-columns: minmax(18rem, 25rem) minmax(0, 1fr);
+  }
+}
+
+.lab-size-label {
+  margin-bottom: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}

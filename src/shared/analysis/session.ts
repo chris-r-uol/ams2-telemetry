@@ -47,7 +47,7 @@ export interface SessionInsights {
 }
 
 /** Laps worth learning from: complete, valid, flying laps with telemetry. */
-export function coachableLaps(laps: AnalysedLap[]): AnalysedLap[] {
+export function coachableLaps(laps: readonly AnalysedLap[]): AnalysedLap[] {
   return laps.filter(
     (l) => l.summary.valid && l.summary.kind === 'flying' && l.summary.lapTime !== null && l.resampled.t.length > 50,
   );

@@ -1,5 +1,7 @@
 import type { FlagColour, GameState, PitMode, SessionState } from '../protocol/constants.ts';
+import type { ChassisEventKind, PhaseBalance, Wheel } from '../analysis/chassis.ts';
 import type { CoachTip } from '../analysis/coach.ts';
+import type { Habit } from '../analysis/session.ts';
 
 export type Quad = [number, number, number, number];
 export type SourceKind = 'udp' | 'demo' | 'replay';
@@ -161,6 +163,99 @@ export interface LiveFrame {
   fuel: FuelState;
   tyres: TyreState;
   weather: { ambientC: number; trackC: number; rain: number };
+  coach: LiveCoachFrame | null;
+}
+
+/** A chassis event spotted during the current lap. */
+export interface LiveEvent {
+  kind: ChassisEventKind;
+  wheel: Wheel | null;
+  corner: string | null;
+  distance: number;
+  lap: number;
+}
+
+/** Speed and balance through one corner, sampled every `step` metres from `from`. */
+export interface CornerProfile {
+  from: number;
+  step: number;
+  speed: (number | null)[];
+  bestSpeed: (number | null)[];
+  /** Extra steering as a share of what the car needed: + understeer, − oversteer. */
+  balance: (number | null)[];
+  apex: number;
+  brakeAt: number | null;
+  bestBrakeAt: number | null;
+}
+
+/** How the corner you just drove went, sent as soon as you pass its exit. */
+export interface CornerReport {
+  lap: number;
+  cornerId: number;
+  corner: string;
+  /** Seconds from the braking zone to the exit, against the reference lap (+ slower). */
+  timeDelta: number | null;
+  /** The same, against your best run through this corner this session. */
+  vsBest: number | null;
+  bestLap: number | null;
+  phases: { entry: PhaseBalance; mid: PhaseBalance; exit: PhaseBalance } | null;
+  minSpeed: number;
+  bestMinSpeed: number | null;
+  /** Metres: + braked earlier than your best run. */
+  brakeEarlierBy: number | null;
+  /** Metres: + back on the throttle later than your best run. */
+  throttleLaterBy: number | null;
+  exitSpeed: number;
+  bestExitSpeed: number | null;
+  slipAngle: number | null;
+  events: LiveEvent[];
+  tip: CoachTip | null;
+  profile: CornerProfile;
+}
+
+/** What to aim for in a corner: your best run, and anything to work on. */
+export interface CornerPlan {
+  cornerId: number;
+  corner: string;
+  entry: number;
+  apex: number;
+  exit: number;
+  bestLap: number | null;
+  bestBrakePoint: number | null;
+  bestMinSpeed: number | null;
+  tip: CoachTip | null;
+  habit: Habit | null;
+}
+
+export interface CornerProgress {
+  cornerId: number;
+  corner: string;
+  timeDelta: number | null;
+  done: boolean;
+}
+
+/** Mid-lap coaching state, sent whenever it changes (a corner finished, a lap started). */
+export interface LiveInsights {
+  sessionId: string | null;
+  lap: number;
+  balanceReady: boolean;
+  gripReady: boolean;
+  corners: CornerProgress[];
+  lastCorner: CornerReport | null;
+  events: LiveEvent[];
+  plans: CornerPlan[];
+  idealLapTime: number | null;
+}
+
+/** Fast-changing coaching values sent with every live frame. */
+export interface LiveCoachFrame {
+  /** Smoothed balance while cornering: + understeer, − oversteer (share of needed steering). */
+  balance: number | null;
+  currentCornerId: number | null;
+  nextCornerId: number | null;
+  toApex: number | null;
+  /** Metres until your best run's braking point for the next corner. */
+  brakeIn: number | null;
 }
 
 /** Coaching feedback produced when a lap completes. */
@@ -208,8 +303,16 @@ export interface SourceStatus {
 }
 
 export type ServerMessage =
-  | { type: 'hello'; version: string; status: SourceStatus; session: SessionMeta | null; feedback: LapFeedback | null }
+  | {
+      type: 'hello';
+      version: string;
+      status: SourceStatus;
+      session: SessionMeta | null;
+      feedback: LapFeedback | null;
+      insights: LiveInsights | null;
+    }
   | { type: 'frame'; frame: LiveFrame }
+  | { type: 'insights'; insights: LiveInsights }
   | { type: 'session'; session: SessionMeta }
   | { type: 'lap'; sessionId: string; summary: LapSummary; feedback: LapFeedback }
   | { type: 'status'; status: SourceStatus };

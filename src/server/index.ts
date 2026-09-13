@@ -20,6 +20,7 @@ import { DEFAULT_UDP_PORT } from '../shared/protocol/constants.ts';
 import { AnalysisService } from './analysis-service.ts';
 import { DemoSimulator } from './demo/simulator.ts';
 import { createRequestHandler } from './http.ts';
+import { LiveCoach } from './live-coach.ts';
 import { attachLiveSocket } from './live-socket.ts';
 import { RecordingManager } from './recordings.ts';
 import { SessionManager } from './session-manager.ts';
@@ -101,6 +102,7 @@ const store = new SessionStore(dataDir);
 const analysis = new AnalysisService(store);
 const hub = new TelemetryHub();
 const manager = new SessionManager(hub, store, analysis, source);
+const coach = new LiveCoach(manager, analysis);
 
 const recordings = new RecordingManager({
   dir: resolve(values.recordings!),
@@ -208,7 +210,7 @@ server.on(
     vite,
   }),
 );
-const live = attachLiveSocket(server, { manager, hub, status, version, frameRate });
+const live = attachLiveSocket(server, { manager, hub, coach, status, version, frameRate });
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') fail(`Port ${port} is already in use. Try: npm start -- --port ${port + 1}`);

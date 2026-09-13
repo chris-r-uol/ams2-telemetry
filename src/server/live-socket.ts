@@ -1,16 +1,19 @@
 /**
- * Pushes live frames, lap events and source status to browsers over /ws.
+ * Pushes live frames, lap events, coaching insights and source status to
+ * browsers over /ws.
  */
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { ServerMessage, SourceStatus } from '../shared/model/types.ts';
+import type { LiveFrame, ServerMessage, SourceStatus } from '../shared/model/types.ts';
 import { roundNumbers } from './http.ts';
+import type { LiveCoach } from './live-coach.ts';
 import type { SessionManager } from './session-manager.ts';
 import type { TelemetryHub } from './telemetry/hub.ts';
 
 export interface LiveSocketDeps {
   manager: SessionManager;
   hub: TelemetryHub;
+  coach: LiveCoach;
   status: () => SourceStatus;
   version: string;
   /** Live frames per second. */
@@ -41,6 +44,7 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
 
   const receiving = () =>
     deps.hub.lastPacketAt !== null && Date.now() - deps.hub.lastPacketAt < RECEIVING_WINDOW_MS;
+  const frame = (): LiveFrame => ({ ...deps.manager.frame(receiving()), coach: deps.coach.frame() });
 
   wss.on('connection', (ws) => {
     ws.send(
@@ -50,9 +54,10 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
         status: deps.status(),
         session: deps.manager.session,
         feedback: deps.manager.lastFeedback,
+        insights: deps.coach.insights(),
       }),
     );
-    ws.send(encode({ type: 'frame', frame: deps.manager.frame(receiving()) }));
+    ws.send(encode({ type: 'frame', frame: frame() }));
   });
 
   let lastBroadcastPacketAt: number | null = null;
@@ -64,7 +69,7 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
     if (!fresh && now - lastIdleFrameAt < 1000) return;
     lastBroadcastPacketAt = deps.hub.lastPacketAt;
     lastIdleFrameAt = now;
-    broadcast({ type: 'frame', frame: deps.manager.frame(receiving()) });
+    broadcast({ type: 'frame', frame: frame() });
   }, 1000 / deps.frameRate);
 
   const statusTimer = setInterval(() => broadcast({ type: 'status', status: deps.status() }), 1000);
@@ -73,6 +78,7 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
   const offLap = deps.manager.onLap((summary, feedback) =>
     broadcast({ type: 'lap', sessionId: feedback.sessionId, summary, feedback }),
   );
+  const offInsights = deps.coach.onInsights((insights) => broadcast({ type: 'insights', insights }));
 
   return {
     close() {
@@ -80,6 +86,7 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
       clearInterval(statusTimer);
       offSession();
       offLap();
+      offInsights();
       for (const client of wss.clients) client.terminate();
       wss.close();
     },

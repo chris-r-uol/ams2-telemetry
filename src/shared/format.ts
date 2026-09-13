@@ -1,4 +1,4 @@
-import type { CoachTip } from './analysis/coach.ts';
+import type { CoachTip, TipKind } from './analysis/coach.ts';
 import type { SessionState } from './protocol/constants.ts';
 
 export type SpeedUnit = 'kmh' | 'mph';
@@ -126,6 +126,29 @@ export function describeTip(tip: CoachTip, units: Units): TipText {
         detail: `No single cause stood out. Compare the speed and pedal traces for this corner.`,
       };
   }
+}
+
+const SHORT_ACTIONS: Record<TipKind, string> = {
+  'brake-later': 'Brake later',
+  'brake-earlier': 'Brake a touch earlier',
+  'carry-speed': 'Carry more speed',
+  'over-driving': 'Slow in, fast out',
+  'throttle-earlier': 'Throttle sooner',
+  'exit-speed': 'Better exit',
+  coasting: "Don't coast",
+  'track-limits': 'Stay on the track',
+  general: 'Find time here',
+};
+
+/** Two or three words, for reading at a glance while driving. */
+export function shortAction(kind: TipKind): string {
+  return SHORT_ACTIONS[kind];
+}
+
+/** +18% / −7%, with a true minus sign. */
+export function signedPercent(share: number): string {
+  const value = Math.round(share * 100);
+  return `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value)}%`;
 }
 
 export interface HabitLike {

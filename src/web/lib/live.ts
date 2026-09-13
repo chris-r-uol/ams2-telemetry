@@ -5,7 +5,14 @@
  * render loop.
  */
 import { useSyncExternalStore } from 'react';
-import type { LapFeedback, LiveFrame, ServerMessage, SessionMeta, SourceStatus } from '../../shared/model/types.ts';
+import type {
+  LapFeedback,
+  LiveFrame,
+  LiveInsights,
+  ServerMessage,
+  SessionMeta,
+  SourceStatus,
+} from '../../shared/model/types.ts';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 
@@ -16,6 +23,8 @@ export interface LiveState {
   status: SourceStatus | null;
   session: SessionMeta | null;
   feedback: LapFeedback | null;
+  /** Mid-lap coaching: corner reports, plans for corners ahead, grip events. */
+  insights: LiveInsights | null;
   /** Increments whenever a lap completes, so views know to refetch. */
   lapSerial: number;
 }
@@ -36,6 +45,7 @@ let state: LiveState = {
   status: null,
   session: null,
   feedback: null,
+  insights: null,
   lapSerial: 0,
 };
 
@@ -69,7 +79,13 @@ function extendTrail(frame: LiveFrame): void {
 function handle(message: ServerMessage): void {
   switch (message.type) {
     case 'hello':
-      set({ version: message.version, status: message.status, session: message.session, feedback: message.feedback });
+      set({
+        version: message.version,
+        status: message.status,
+        session: message.session,
+        feedback: message.feedback,
+        insights: message.insights,
+      });
       break;
     case 'frame':
       extendTrail(message.frame);
@@ -83,6 +99,9 @@ function handle(message: ServerMessage): void {
       break;
     case 'lap':
       set({ feedback: message.feedback, lapSerial: state.lapSerial + 1 });
+      break;
+    case 'insights':
+      set({ insights: message.insights });
       break;
   }
 }

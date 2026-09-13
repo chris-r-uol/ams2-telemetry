@@ -8,7 +8,15 @@ import { liveDelta } from '../shared/analysis/delta.ts';
 import { cornerMetrics, type CornerMetrics } from '../shared/analysis/metrics.ts';
 import { DEFAULT_STEP_METRES, resampleByDistance } from '../shared/analysis/resample.ts';
 import { coachableLaps, mean, type AnalysedLap } from '../shared/analysis/session.ts';
-import type { FuelState, LapFeedback, LapSummary, LiveFrame, SessionMeta, SourceKind } from '../shared/model/types.ts';
+import type {
+  FuelState,
+  LapFeedback,
+  LapSummary,
+  LapTrace,
+  LiveFrame,
+  SessionMeta,
+  SourceKind,
+} from '../shared/model/types.ts';
 import type { AnalysisService, Reference } from './analysis-service.ts';
 import type { SessionStore } from './storage.ts';
 import type { SessionContext, TelemetryHub, Tick } from './telemetry/hub.ts';
@@ -17,7 +25,7 @@ import { LapBuilder, type CompletedLap } from './telemetry/lap-builder.ts';
 const RECORDING_STATES = new Set<string>(['playing', 'menuTimeTicking']);
 
 type SessionListener = (session: SessionMeta) => void;
-type LapListener = (summary: LapSummary, feedback: LapFeedback) => void;
+type LapListener = (summary: LapSummary, feedback: LapFeedback, trace: LapTrace) => void;
 
 export function makeSessionId(now: number, location: string, variation: string): string {
   const stamp = new Date(now).toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -47,6 +55,7 @@ export class SessionManager {
   private lookedForAllTimeBest = false;
   private readonly sessionListeners = new Set<SessionListener>();
   private readonly lapListeners = new Set<LapListener>();
+  private readonly tickListeners = new Set<(tick: Tick) => void>();
 
   constructor(hub: TelemetryHub, store: SessionStore, analysis: AnalysisService, source: SourceKind) {
     this.hub = hub;
@@ -68,7 +77,29 @@ export class SessionManager {
     return () => this.lapListeners.delete(listener);
   }
 
-  frame(receiving: boolean): LiveFrame {
+  /** Called after each on-track tick has been added to the current lap. */
+  onTickProcessed(listener: (tick: Tick) => void): () => void {
+    this.tickListeners.add(listener);
+    return () => this.tickListeners.delete(listener);
+  }
+
+  get lapDistance(): number {
+    return this.builder.distance;
+  }
+
+  get timedLap(): boolean {
+    return this.builder.isTimedLap;
+  }
+
+  get currentTrace(): LapTrace | null {
+    return this.builder.currentTrace;
+  }
+
+  get analysedLaps(): readonly AnalysedLap[] {
+    return this.laps;
+  }
+
+  frame(receiving: boolean): Omit<LiveFrame, 'coach'> {
     const tick = this.lastTick;
     const ctx = this.hub.context;
     const ref = this.reference;
@@ -137,6 +168,7 @@ export class SessionManager {
     const completed = this.builder.push(tick);
     this.lastTick = tick;
     if (completed) this.completeLap(completed);
+    for (const listener of this.tickListeners) listener(tick);
   }
 
   private isNewSession(ctx: SessionContext, tick: Tick): boolean {
@@ -240,7 +272,7 @@ export class SessionManager {
     };
     this.lastFeedback = feedback;
     this.emitSession();
-    for (const listener of this.lapListeners) listener(summary, feedback);
+    for (const listener of this.lapListeners) listener(summary, feedback, trace);
   }
 
   /**

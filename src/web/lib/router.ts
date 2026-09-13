@@ -17,6 +17,7 @@ export type Route =
   | { name: 'compare'; session: string | null; lap: number | null; refSession: string | null; refLap: number | null }
   | { name: 'coach'; id: string | null }
   | { name: 'setup'; session: string | null; lap: number | null; compare: string | null }
+  | { name: 'lab' }
   | { name: 'settings' };
 
 const num = (value: string | undefined) => (value && /^\d+$/.test(value) ? Number(value) : null);
@@ -38,6 +39,8 @@ export function parseHash(hash: string): Route {
       return { name: 'coach', id: parts[1] || null };
     case 'setup':
       return { name: 'setup', session: parts[1] || null, lap: num(parts[2]), compare: parts[3] || null };
+    case 'lab':
+      return { name: 'lab' };
     case 'settings':
       return { name: 'settings' };
     default:
@@ -66,6 +69,8 @@ export function href(route: Route): string {
       const filled = parts.slice(0, parts.findLastIndex((p) => p !== null) + 1);
       return `#/setup${filled.map((p) => `/${e(String(p ?? ''))}`).join('')}`;
     }
+    case 'lab':
+      return '#/lab';
     case 'settings':
       return '#/settings';
   }
