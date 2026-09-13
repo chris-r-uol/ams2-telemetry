@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+
+# Your recorded sessions and raw packet captures stay on your machine
+data/
+recordings/
+*.ams2rec
+
+.DS_Store
+Thumbs.db
+*.log
+.env
+.vscode/*
+!.vscode/extensions.json
+.idea/

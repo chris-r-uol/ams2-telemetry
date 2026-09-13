@@ -1,0 +1,122 @@
+/*
+ * Design tokens.
+ *
+ * Chart colours come from a validated colour-blind-safe palette (see
+ * docs/design.md). Text colours are separate steps chosen to clear WCAG 4.5:1
+ * on their surface; colour never carries meaning on its own.
+ */
+:root {
+  color-scheme: light;
+  --text-scale: 1;
+
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --surface-3: #e9e8e3;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #66655f;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.24);
+
+  /* Lap identity: the lap you're looking at is the accent; the reference is context. */
+  --lap: #2a78d6;
+  --lap-wash: rgba(42, 120, 214, 0.1);
+  --reference: #898781;
+
+  /* Pedals: always shown next to a text label. */
+  --throttle: #1baf7a;
+  --brake: #eb6834;
+
+  /* Status: time gained / lost, tyre windows. Always with a sign, icon and words. */
+  --good: #0ca30c;
+  --bad: #d03b3b;
+  --warning: #fab219;
+  --good-ink: #006300;
+  --bad-ink: #b32d2d;
+  --warning-ink: #8a5a00;
+  --good-wash: rgba(12, 163, 12, 0.12);
+  --bad-wash: rgba(208, 59, 59, 0.12);
+  --warning-wash: rgba(250, 178, 25, 0.18);
+
+  --accent-ink: #1c5cab;
+  --focus: #1c5cab;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --gap: 0.75rem;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --surface-3: #2c2c2a;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #a3a198;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.24);
+    --lap: #3987e5;
+    --lap-wash: rgba(57, 135, 229, 0.16);
+    --reference: #898781;
+    --throttle: #199e70;
+    --brake: #d95926;
+    --good-ink: #3dbb3d;
+    --bad-ink: #ff8f85;
+    --warning-ink: #fab219;
+    --good-wash: rgba(12, 163, 12, 0.18);
+    --bad-wash: rgba(208, 59, 59, 0.2);
+    --warning-wash: rgba(250, 178, 25, 0.16);
+    --accent-ink: #86b6ef;
+    --focus: #86b6ef;
+    --shadow: none;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232322;
+  --surface-3: #2c2c2a;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #a3a198;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.24);
+  --lap: #3987e5;
+  --lap-wash: rgba(57, 135, 229, 0.16);
+  --reference: #898781;
+  --throttle: #199e70;
+  --brake: #d95926;
+  --good-ink: #3dbb3d;
+  --bad-ink: #ff8f85;
+  --warning-ink: #fab219;
+  --good-wash: rgba(12, 163, 12, 0.18);
+  --bad-wash: rgba(208, 59, 59, 0.2);
+  --warning-wash: rgba(250, 178, 25, 0.16);
+  --accent-ink: #86b6ef;
+  --focus: #86b6ef;
+  --shadow: none;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ink-2: var(--ink);
+    --ink-muted: var(--ink);
+    --border: var(--border-strong);
+    --grid: var(--axis);
+  }
+}

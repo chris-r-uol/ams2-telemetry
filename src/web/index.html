@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="Live telemetry dashboard and driving coach for Automobilista 2." />
+    <title>AMS2 Coach</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // Apply saved theme and text size before first paint (no flash on a dark rig).
+      try {
+        var saved = JSON.parse(localStorage.getItem('ams2-coach:settings') || '{}');
+        var root = document.documentElement;
+        if (saved.theme === 'light' || saved.theme === 'dark') root.dataset.theme = saved.theme;
+        else if (saved.theme === 'system') delete root.dataset.theme;
+        if (saved.textScale) root.style.setProperty('--text-scale', String(saved.textScale));
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

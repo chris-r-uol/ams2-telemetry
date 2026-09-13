@@ -1,0 +1,51 @@
+{
+  "name": "ams2-telemetry",
+  "version": "0.1.0",
+  "description": "Live telemetry dashboard and driving coach for Automobilista 2 that runs in your browser.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "keywords": [
+    "automobilista-2",
+    "ams2",
+    "sim-racing",
+    "telemetry",
+    "driving-coach",
+    "project-cars-2",
+    "udp"
+  ],
+  "scripts": {
+    "start": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning src/server/index.ts",
+    "demo": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning src/server/index.ts --source demo",
+    "replay": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning src/server/index.ts --source replay --file",
+    "dev": "node --disable-warning=ExperimentalWarning --watch-path=src/server --watch-path=src/shared src/server/index.ts --dev --source demo",
+    "dev:udp": "node --disable-warning=ExperimentalWarning --watch-path=src/server --watch-path=src/shared src/server/index.ts --dev --source udp",
+    "demo:send-udp": "node --disable-warning=ExperimentalWarning src/server/tools/send-demo-udp.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "screenshots": "node --disable-warning=ExperimentalWarning scripts/screenshots.ts",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "uplot": "^1.6.32",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "playwright-core": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}
