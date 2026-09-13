@@ -127,3 +127,41 @@ export function describeTip(tip: CoachTip, units: Units): TipText {
       };
   }
 }
+
+export interface HabitLike {
+  kind: CoachTip['kind'];
+  corner: string;
+  count: number;
+  outOf: number;
+  averageAmount: number;
+  averageTimeLost: number;
+}
+
+/** Wording for a pattern that repeats across laps. */
+export function describeHabit(h: HabitLike, units: Units): TipText {
+  const c = h.corner;
+  const metres = `${Math.round(h.averageAmount)} m`;
+  const speed = `${Math.max(1, Math.round(speedIn(h.averageAmount, units.speed)))} ${speedLabel(units.speed)}`;
+  const often = `${h.count} of ${h.outOf} laps`;
+  const cost = h.averageTimeLost >= 0.01 ? `, costing about ${h.averageTimeLost.toFixed(2)} s each time` : '';
+  switch (h.kind) {
+    case 'brake-later':
+      return { title: `You brake early into ${c}`, detail: `On ${often} you braked about ${metres} earlier than your best run${cost}.` };
+    case 'brake-earlier':
+      return { title: `You overshoot the braking point at ${c}`, detail: `On ${often} you braked about ${metres} later and lost the apex${cost}.` };
+    case 'carry-speed':
+      return { title: `You're slow through the apex of ${c}`, detail: `On ${often} minimum speed was about ${speed} lower than your best${cost}.` };
+    case 'over-driving':
+      return { title: `You over-drive the entry to ${c}`, detail: `On ${often} a faster entry cost about ${speed} on the exit${cost}.` };
+    case 'throttle-earlier':
+      return { title: `You're late on the throttle out of ${c}`, detail: `On ${often} throttle pickup came about ${metres} later than your best${cost}.` };
+    case 'exit-speed':
+      return { title: `Your exits from ${c} are slow`, detail: `On ${often} exit speed was about ${speed} lower than your best${cost}.` };
+    case 'coasting':
+      return { title: `You coast into ${c}`, detail: `On ${often} you spent about ${metres} with neither pedal applied${cost}.` };
+    case 'track-limits':
+      return { title: `You run wide at ${c}`, detail: `Wheels left the racing surface here on ${often}.` };
+    case 'general':
+      return { title: `You lose time at ${c}`, detail: `It happened on ${often}${cost}.` };
+  }
+}

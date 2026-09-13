@@ -1,0 +1,1182 @@
+/* ============ App shell ============ */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding: 0.5rem clamp(0.75rem, 2vw, 1.5rem);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.8rem;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.nav a:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.nav a[aria-current='page'] {
+  background: var(--lap-wash);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--lap);
+}
+
+.header-status {
+  margin-left: auto;
+}
+
+.app-main {
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  max-width: 1920px;
+  margin: 0 auto;
+  outline: none;
+}
+
+.page {
+  display: grid;
+  gap: var(--gap);
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.5rem;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.2rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.loading {
+  color: var(--ink-muted);
+  padding: 2rem 0;
+}
+
+.error-text {
+  color: var(--bad-ink);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.3em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+code {
+  font-size: 0.9em;
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+/* ============ Shared pieces ============ */
+
+.delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.delta-icon {
+  font-size: 0.7em;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--gap);
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow);
+}
+
+.stat-label {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1.2;
+  margin: 0.15rem 0;
+}
+
+.stat-detail {
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.empty-state {
+  max-width: 40rem;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.empty-state h2 {
+  font-size: 1.375rem;
+  color: var(--ink);
+  margin-bottom: 0.75rem;
+}
+
+.empty-state-body {
+  display: grid;
+  gap: 0.75rem;
+  color: var(--ink-2);
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.card-footer-link {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.lap-status {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.is-best-sector {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--good);
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 9rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  transform: translate(-50%, calc(-100% - 14px));
+}
+
+.chart-tooltip strong {
+  font-size: 1rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============ Traces ============ */
+
+.trace {
+  margin: 0;
+}
+
+.trace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.trace-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.key {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0;
+  border-top: 3px solid currentColor;
+  border-radius: 2px;
+}
+
+.key-lap {
+  color: var(--lap);
+}
+
+.key-reference {
+  color: var(--reference);
+}
+
+.key-slower {
+  color: var(--bad);
+}
+
+.key-faster {
+  color: var(--good);
+}
+
+.trace-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.trace-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  min-height: 2.6rem;
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.readout-item {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.readout-item strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9375rem;
+}
+
+.readout-item span {
+  font-size: 0.75rem;
+}
+
+.trace-plots {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.trace-panel {
+  position: relative;
+}
+
+.trace-panel-title {
+  display: block;
+  margin: 0.2rem 0 0.1rem 72px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.trace-table {
+  max-height: 28rem;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+
+.uplot,
+.uplot * {
+  font-family: var(--font-sans);
+}
+
+.u-select {
+  background: var(--lap-wash);
+}
+
+/* ============ Track map ============ */
+
+.track-map {
+  display: block;
+  overflow: visible;
+  width: 100%;
+  height: auto;
+  max-height: 26rem;
+}
+
+.track-map-empty {
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.map-outline {
+  fill: none;
+  stroke: var(--axis);
+  stroke-width: 9px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-segment {
+  fill: none;
+  stroke-width: 6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-segment.is-slower {
+  stroke: var(--bad);
+}
+
+.map-segment.is-faster {
+  stroke: var(--good);
+}
+
+.map-start {
+  fill: var(--surface);
+  stroke: var(--ink);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-label text {
+  font-size: 28px;
+  font-weight: 700;
+  fill: var(--ink-2);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 8px;
+  stroke-linejoin: round;
+}
+
+.map-label .map-label-delta {
+  font-size: 24px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.map-marker {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-car {
+  fill: var(--lap);
+  stroke: var(--surface);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+/* ============ Live view ============ */
+
+.live {
+  display: grid;
+  gap: var(--gap);
+}
+
+.live-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+}
+
+.live-strip-title h1 {
+  font-size: 1.375rem;
+}
+
+.live-strip-title p {
+  font-size: 0.875rem;
+}
+
+.strip-facts {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0;
+}
+
+.strip-facts div {
+  display: grid;
+}
+
+.strip-facts dt {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.strip-facts dd {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.strip-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.live-strip > .btn {
+  margin-left: auto;
+}
+
+.live-grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 760px) {
+  .live-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'delta times'
+      'coach car'
+      'map map'
+      'trace trace'
+      'laps laps';
+  }
+}
+
+@media (min-width: 1280px) {
+  .live-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'delta times map'
+      'coach car map'
+      'trace trace trace'
+      'laps laps laps';
+  }
+}
+
+@media (min-width: 760px) {
+  .delta-card {
+    grid-area: delta;
+  }
+  .times-card {
+    grid-area: times;
+  }
+  .map-card {
+    grid-area: map;
+  }
+  .coach-card {
+    grid-area: coach;
+  }
+  .car-card {
+    grid-area: car;
+  }
+  .trace-card {
+    grid-area: trace;
+  }
+  .laps-card {
+    grid-area: laps;
+  }
+
+  .live.is-glance .live-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'delta times'
+      'coach car';
+  }
+}
+
+.delta-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  border-left-width: 6px;
+  border-left-color: var(--border-strong);
+  container-type: inline-size;
+}
+
+.delta-card.tone-slower {
+  background: linear-gradient(var(--bad-wash), var(--bad-wash)), var(--surface);
+  border-left-color: var(--bad);
+}
+
+.delta-card.tone-faster {
+  background: linear-gradient(var(--good-wash), var(--good-wash)), var(--surface);
+  border-left-color: var(--good);
+}
+
+.delta-hero .delta {
+  flex-wrap: wrap;
+}
+
+.delta-hero {
+  /* Sized to the card, not the window, so it never spills out. */
+  font-size: clamp(3rem, 20cqi, 6.5rem);
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.delta-hero .delta-words {
+  font-size: 0.3em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.delta-context {
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
+
+.delta-invalid {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  font-size: 0.875rem;
+}
+
+.times {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.times-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+.times-row:last-child {
+  border-bottom: 0;
+}
+
+.times-row dt {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+.times-row dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 650;
+}
+
+.times-row dd .delta,
+.times-row dd .muted {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.times-row.is-current dd {
+  font-size: 2rem;
+}
+
+.tips {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: tip;
+}
+
+.tip {
+  position: relative;
+  padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  counter-increment: tip;
+}
+
+.tip::before {
+  content: counter(tip);
+  position: absolute;
+  left: 0.7rem;
+  top: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.tip-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 1rem;
+}
+
+.tip-head .delta {
+  font-weight: 700;
+}
+
+.tip p {
+  margin-top: 0.2rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.car-top {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: end;
+  gap: 1rem;
+}
+
+.gear,
+.speed {
+  display: grid;
+  line-height: 1;
+}
+
+.gear-value {
+  font-size: 3rem;
+  font-weight: 750;
+}
+
+.speed-value {
+  font-size: 2.25rem;
+  font-weight: 650;
+}
+
+.pedals {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.9rem 0;
+}
+
+.meter-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  margin-bottom: 0.2rem;
+}
+
+.meter-track {
+  position: relative;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  transform-origin: left center;
+  background: var(--lap);
+  border-radius: 999px;
+}
+
+.meter-throttle .meter-fill {
+  background: var(--throttle);
+}
+
+.meter-brake .meter-fill {
+  background: var(--brake);
+}
+
+.steering-track::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink-muted);
+}
+
+.steering-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--lap);
+}
+
+.tyres {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.tyre {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.tyre.is-hot {
+  border-color: var(--warning);
+  background: var(--warning-wash);
+}
+
+.tyre.is-cold {
+  border-color: var(--lap);
+  background: var(--lap-wash);
+}
+
+.tyre .badge {
+  justify-self: start;
+}
+
+.tyre-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.tyre-name abbr {
+  text-decoration: none;
+}
+
+.tyre-temp {
+  font-size: 1.375rem;
+  font-weight: 650;
+}
+
+.tyre-meta {
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+
+.fuel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0.9rem 0 0;
+}
+
+.fuel div {
+  display: grid;
+}
+
+.fuel dt {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.fuel dd {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+/* Glance mode: fewer things, much bigger. */
+
+.live.is-glance .delta-hero {
+  font-size: clamp(4rem, 22cqi, 11rem);
+}
+
+.live.is-glance .times-row dd {
+  font-size: 2rem;
+}
+
+.live.is-glance .times-row.is-current dd {
+  font-size: 2.75rem;
+}
+
+.live.is-glance .tip-head {
+  font-size: 1.375rem;
+}
+
+.live.is-glance .tip p {
+  font-size: 1.0625rem;
+}
+
+.live.is-glance .gear-value {
+  font-size: 5rem;
+}
+
+.live.is-glance .speed-value {
+  font-size: 3.5rem;
+}
+
+.live.is-glance .meter-track {
+  height: 1.1rem;
+}
+
+.live.is-glance .tyre-temp {
+  font-size: 2rem;
+}
+
+/* ============ Session / lap time chart ============ */
+
+.laptime-chart {
+  position: relative;
+  width: 100%;
+}
+
+.laptime-chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.lt-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.lt-axis-label {
+  font-size: 12px;
+  fill: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-line {
+  fill: none;
+  stroke: var(--lap);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.lt-point {
+  cursor: pointer;
+  outline: none;
+}
+
+.lt-hit {
+  fill: transparent;
+}
+
+.lt-dot {
+  fill: var(--lap);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.lt-point.is-hollow .lt-dot {
+  fill: var(--surface);
+  stroke: var(--reference);
+}
+
+.lt-point.is-best .lt-dot {
+  fill: var(--good);
+}
+
+.lt-selected-ring {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.lt-point:focus-visible .lt-hit {
+  stroke: var(--focus);
+  stroke-width: 3;
+}
+
+.lt-point:hover .lt-dot {
+  stroke: var(--ink);
+}
+
+.lt-label {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink-2);
+}
+
+.compare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.select-cell input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--lap);
+}
+
+/* ============ Compare & coach ============ */
+
+.compare-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.compare-pickers .field {
+  min-width: 14rem;
+}
+
+.picker-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.compare-grid,
+.coach-grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1100px) {
+  .compare-grid {
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .coach-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .span-all {
+    grid-column: 1 / -1;
+  }
+}
+
+.sticky-side {
+  position: sticky;
+  top: 4.25rem;
+  display: grid;
+  gap: var(--gap);
+}
+
+.corner-row-name {
+  font-weight: 650;
+}
+
+.data tr.is-highlighted {
+  background: var(--lap-wash);
+}
+
+.habit-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habit {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.habit-count {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.habit-bar {
+  flex: 1;
+  max-width: 10rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.habit-bar span {
+  display: block;
+  height: 100%;
+  background: var(--lap);
+  border-radius: 999px;
+}
+
+.potential-bar {
+  display: inline-block;
+  height: 0.55rem;
+  min-width: 2px;
+  max-width: 8rem;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  border-radius: 0 4px 4px 0;
+  background: var(--bad);
+}
+
+/* ============ Settings ============ */
+
+.settings-grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+}
+
+.setting {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+.setting:last-child {
+  border-bottom: 0;
+}
+
+.setting-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.setting-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  accent-color: var(--lap);
+}
+
+.inline-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.inline-fields .field input {
+  width: 6rem;
+}
+
+.diagnostics {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.diagnostics dt {
+  color: var(--ink-muted);
+}
+
+.diagnostics dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+@media print {
+  .app-header,
+  .trace-actions,
+  .page-actions {
+    display: none;
+  }
+}

@@ -5,6 +5,14 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chris-r-uol/ams2-telemetry.git"
+  },
+  "homepage": "https://github.com/chris-r-uol/ams2-telemetry#readme",
+  "bugs": {
+    "url": "https://github.com/chris-r-uol/ams2-telemetry/issues"
+  },
   "engines": {
     "node": ">=22.18"
   },
