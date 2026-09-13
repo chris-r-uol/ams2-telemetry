@@ -60,7 +60,13 @@ build yet:
   estimate inside the metre the game reported.
 - **Sector numbering** (0- or 1-based) doesn't matter: splits are taken when the
   value changes.
-- **Tyre pressure** (`sAirPressure`) is treated as kPa.
+- **Tyre pressure** (`sAirPressure`): AMS2's shared-memory header says PSI, while PC2-era data
+  looks like kPa. Values under 70 are treated as PSI, larger ones as kPa.
+- **Chassis channels** used by the [car setup analysis](car-setup.md): `sSuspensionTravel`
+  (metres), `sSuspensionVelocity`, `sRideHeight` (AMS2 documents cm), `sTyreRPS` (rev/s),
+  `sTyreFlags` (bit 2 = on the ground), `sAngularVelocity` (rad/s), `sLocalVelocity` (m/s)
+  and `sOrientation`. Their directions and the ride-height unit are detected from the data
+  rather than assumed; the page shows what was detected.
 - **Lateral / longitudinal g** come from `sLocalAcceleration`. The sign convention
   isn't used by the coaching logic.
 - **Terrain materials** are the PC2 list; off-track detection is best effort, and the

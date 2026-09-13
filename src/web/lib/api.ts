@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ChassisAnalysis } from '../../shared/analysis/chassis.ts';
 import type { CoachTip, LapComparison } from '../../shared/analysis/coach.ts';
 import type { Corner } from '../../shared/analysis/corners.ts';
 import type { ResampledLap } from '../../shared/analysis/resample.ts';
@@ -22,6 +23,11 @@ export interface CompareDto {
   comparison: LapComparison;
 }
 
+export interface ChassisDto {
+  analysis: ChassisAnalysis;
+  corners: Corner[];
+}
+
 export interface LiveReferenceDto {
   source: 'session' | 'all-time';
   sessionId: string;
@@ -41,6 +47,14 @@ export const api = {
   compare: (session: string, lap: number, refSession: string, refLap: number) =>
     `/api/compare?${new URLSearchParams({ session, lap: String(lap), refSession, refLap: String(refLap) })}`,
   liveReference: () => '/api/live/reference',
+  sessionExport: (id: string) => `/api/sessions/${encodeURIComponent(id)}/export`,
+  recordings: () => '/api/recordings',
+  recording: (name: string) => `/api/recordings/${encodeURIComponent(name)}`,
+  recordingStart: () => '/api/recordings/start',
+  recordingStop: () => '/api/recordings/stop',
+  recordingSettings: () => '/api/recordings/settings',
+  chassis: (id: string) => `/api/sessions/${encodeURIComponent(id)}/chassis`,
+  chassisLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/chassis/laps/${lap}`,
 };
 
 export async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -50,6 +64,11 @@ export async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.error ?? `Request failed (${response.status})`);
   }
   return (await response.json()) as T;
+}
+
+/** Send a change to the server. Always JSON: the server rejects anything else. */
+export function sendJson<T>(path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown = {}): Promise<T> {
+  return getJson<T>(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 }
 
 export interface ApiResult<T> {

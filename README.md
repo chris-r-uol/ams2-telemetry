@@ -12,7 +12,7 @@ lost time, and exactly what to try on the next one.
 ![Node 22.18+](https://img.shields.io/badge/node-22.18%2B-3c873a.svg)
 ![Windows · macOS · Linux](https://img.shields.io/badge/runs%20on-Windows%20·%20macOS%20·%20Linux-555.svg)
 
-<img src="docs/images/live-dark.png" alt="The live dashboard: a large green live delta of minus 0.25 seconds (faster) against the session best, lap times with a predicted 1:38.183, a track map with the car's position and the three corners that cost the most time last lap marked in red, three coaching tips led by 'Brake later into T11, +0.56', and a car panel with gear, speed, pedals and four tyre temperatures." width="100%">
+<img src="docs/images/live-dark.png" alt="The live dashboard: a large green live delta showing the current lap is faster than the session best, current, predicted, last and best lap times, a track map with the car's position and the corners that cost the most time last lap marked in red, three coaching tips led by 'Brake later into T11', and a car panel with gear, speed, pedals, steering, four tyre temperatures and fuel." width="100%">
 
 </div>
 
@@ -32,7 +32,14 @@ lost time, and exactly what to try on the next one.
   lost and a corner-by-corner breakdown.
 - **Session coaching.** Your ideal lap (your best run through every corner, combined), how far
   your best lap is from it, consistency, and **habits**: mistakes you repeat lap after lap.
-- **Every lap saved** automatically, with sectors, top speed, fuel and tyre data.
+- **Car setup analysis.** Understeer and oversteer through every corner, slip angle,
+  lock-ups, wheelspin, suspension travel, ride height, bottoming, bump stops, wheels lifting,
+  damper histograms and roll/dive figures, with suggestions for what to change and a
+  side-by-side comparison with another setup. [How it's worked out](docs/car-setup.md).
+- **Raw telemetry recording.** Press Record, drive, then download the file. It replays
+  exactly on any computer, which makes it the best way to share a problem.
+- **Every lap saved** automatically, with sectors, top speed, fuel and tyre data, and
+  downloadable as JSON.
 - **Glance mode** (press <kbd>G</kbd>) for reading from the driving seat, plus dark and light
   themes and text size up to 150%.
 - **Built to be accessible.** Colour-blind-safe palette, and colour is never the only signal:
@@ -83,9 +90,21 @@ corner best. If you've done it once, you can do it again. Read
 
 ### Glance mode
 
-<img src="docs/images/live-glance.png" alt="Glance mode: the live delta shown at a very large size with the word faster, big lap times, the coaching tips in large text, and the car panel with gear 6 at 242 km/h." width="100%">
+<img src="docs/images/live-glance.png" alt="Glance mode: the live delta shown at a very large size with the word faster, big lap times, the coaching tips in large text, and the car panel with a large gear and speed readout." width="100%">
 
 Only what you can take in within half a second. Toggle it with <kbd>G</kbd>.
+
+### Tune the car
+
+<img src="docs/images/setup-hints.png" alt="Car setup page, 'What the data suggests': Important hints that the front is bottoming out under braking into T5, T11 and T8 and that the front wheels lock into T5, each with the evidence and things to try, such as raising the front ride height or moving brake bias rearward. Further hints cover the front suspension running out of travel, wheels lifting over a kerb, rear wheelspin, mid-corner understeer and moments of sudden oversteer." width="100%">
+
+The setup page turns suspension, wheel-speed and yaw data into plain findings, each with the
+evidence and a short list of things to try. Every figure is explained in
+[docs/car-setup.md](docs/car-setup.md).
+
+<img src="docs/images/setup-balance.png" alt="Balance and grip card: a balance trace by distance shaded blue above zero for understeer and orange below zero for oversteer, with slip angle and speed underneath and small triangles marking lock-ups, wheelspin and oversteer moments. Below it, a corner table gives an entry, mid-corner and exit verdict for each corner, such as 'Understeer +26%' or 'Neutral +2%'." width="100%">
+
+<img src="docs/images/setup-dampers.png" alt="Damper movement card with four histograms, one per wheel, showing the share of time at each damper speed from −250 to +250 mm/s, each labelled with its rebound and bump percentages and its fast-movement shares." width="100%">
 
 ### Every lap, saved
 
@@ -143,21 +162,24 @@ flowchart LR
 | **uPlot** | Draws tens of thousands of points per chart quickly, which live telemetry needs. |
 | **Files on disk** | Sessions are plain JSON and gzip in `data/`. No database to install. |
 
-## Recording and replaying
+## Recording and sharing raw telemetry
 
-Record the raw packets from a real session:
+Press **Record telemetry** on the Live or Sessions page before you head out, and press it again
+when you're done. Or tick **Record every session automatically** to get one file per session.
+Recordings appear on the Sessions page with a **Download** button.
+
+<img src="docs/images/recordings.png" alt="Raw telemetry recordings card with a Record telemetry button, a checkbox to record every session automatically, and a table listing a recording of Coachwood Park Grand Prix with its start time, length, file size and Download and Delete buttons." width="100%">
+
+A recording holds every packet exactly as the game sent it, so it replays identically anywhere,
+including on a Mac with no game installed:
 
 ```bash
-npm start -- --record
+npm run replay -- recordings/2026-09-13-19-55-01_interlagos-gp.ams2rec
 ```
 
-Then replay it anywhere, including on a Mac with no game installed:
-
-```bash
-npm run replay -- recordings/2026-09-13T19-55-01-000Z.ams2rec
-```
-
-Add `--speed 4` to fast-forward or `--loop` to repeat. Recordings are the best way to report a bug.
+Add `--speed 4` to fast-forward or `--loop` to repeat. Recordings are the best way to report a
+bug or check the analysis against a particular car. Each session page also has **Download lap
+data**, which gives the processed laps as JSON.
 
 ## Options
 
@@ -169,7 +191,8 @@ Add `--speed 4` to fast-forward or `--loop` to repeat. Recordings are the best w
 | `--port` | `8606` | dashboard port |
 | `--host` | `127.0.0.1` | use `0.0.0.0` to allow other devices on your network |
 | `--udp-port` | `5606` | port AMS2 sends to |
-| `--record` | off | save raw packets to `recordings/` |
+| `--record` | off | start recording raw packets straight away |
+| `--recordings <dir>` | `./recordings` | where recordings are saved |
 | `--file`, `--speed`, `--loop` | | replay controls |
 | `--prefill <laps>` | `0` | demo: simulate laps instantly before going live |
 | `--data <dir>` | `./data` | where sessions are stored |
@@ -197,6 +220,8 @@ something looks off, please open an issue with a recording.
 
 - [ ] Verify every field against live AMS2 sessions
 - [ ] Real corner names for known circuits
+- [ ] Verify the chassis channels (units and directions) against more cars
+- [ ] Tyre temperature across the tread (inside, middle, outside) for camber and pressure
 - [ ] Friction-circle (g-g) chart
 - [ ] Import and export laps to compare with friends
 - [ ] Optional shared-memory source on Windows for extra channels

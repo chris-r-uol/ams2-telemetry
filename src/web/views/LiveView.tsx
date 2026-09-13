@@ -23,6 +23,7 @@ import { bestLap, bestSectors, gearLabel, LapStatus } from '../components/laps.t
 import { TraceStack, type TracePanel } from '../components/TraceStack.tsx';
 import { TrackMap, type MapSegment } from '../components/TrackMap.tsx';
 import { Card, DeltaValue, EmptyState } from '../components/ui.tsx';
+import { RecordButton } from '../components/RecordButton.tsx';
 import { api, useApi, type LiveReferenceDto } from '../lib/api.ts';
 import { getLive, getTrail, subscribeLive, useLive } from '../lib/live.ts';
 import { href } from '../lib/router.ts';
@@ -194,9 +195,12 @@ function SessionStrip({
           </span>
         )}
       </div>
-      <button type="button" className="btn" aria-pressed={glance} onClick={onToggleGlance}>
-        Glance mode <kbd aria-hidden="true">G</kbd>
-      </button>
+      <div className="strip-actions">
+        <RecordButton />
+        <button type="button" className="btn" aria-pressed={glance} onClick={onToggleGlance}>
+          Glance mode <kbd aria-hidden="true">G</kbd>
+        </button>
+      </div>
     </div>
   );
 }

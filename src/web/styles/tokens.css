@@ -120,3 +120,18 @@
     --grid: var(--axis);
   }
 }
+
+/* Oversteer shading on balance charts: the brake hue as a light wash. */
+:root {
+  --brake-wash: rgba(235, 104, 52, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --brake-wash: rgba(217, 89, 38, 0.24);
+  }
+}
+
+:root[data-theme='dark'] {
+  --brake-wash: rgba(217, 89, 38, 0.24);
+}

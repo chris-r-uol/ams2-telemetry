@@ -1180,3 +1180,248 @@ code {
     display: none;
   }
 }
+
+/* ============ Recording ============ */
+
+.strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-left: auto;
+}
+
+.record {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.record-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--bad);
+}
+
+.record-btn.is-recording {
+  border-color: var(--bad);
+  background: var(--bad-wash);
+}
+
+/* Square while recording: the familiar "stop" shape, so state isn't colour alone. */
+.record-btn.is-recording .record-dot {
+  border-radius: 2px;
+}
+
+.record-meta {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .record-btn.is-recording .record-dot {
+    animation: record-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes record-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.recording-file {
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.recording-hint {
+  margin-top: 0.75rem;
+}
+
+/* ============ Car setup ============ */
+
+.availability {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.availability li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.availability .is-missing {
+  color: var(--ink-muted);
+}
+
+.calibration-notes {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.hint-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hint {
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--border-strong);
+  background: var(--surface-2);
+}
+
+.hint.is-high {
+  border-left-color: var(--bad);
+}
+
+.hint.is-medium {
+  border-left-color: var(--warning);
+}
+
+.hint-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  font-size: 1rem;
+}
+
+.hint p {
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.hint .hint-try {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hint ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.875rem;
+}
+
+.badge-understeer {
+  color: var(--accent-ink);
+  background: var(--lap-wash);
+}
+
+.badge-oversteer {
+  color: var(--ink);
+  background: var(--brake-wash);
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.95rem;
+  height: 0.7rem;
+  border-radius: 2px;
+}
+
+.swatch-understeer {
+  background: var(--lap-wash);
+  box-shadow: inset 0 0 0 1px var(--lap);
+}
+
+.swatch-oversteer {
+  background: var(--brake-wash);
+  box-shadow: inset 0 0 0 1px var(--brake);
+}
+
+.setup-table {
+  margin-top: 0.75rem;
+}
+
+.histograms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+.histogram {
+  margin: 0;
+  min-width: 0;
+}
+
+.histogram h3 {
+  margin-bottom: 0.25rem;
+}
+
+.histogram-wrap {
+  position: relative;
+}
+
+.histogram svg {
+  display: block;
+  overflow: visible;
+}
+
+.hist-hit {
+  fill: transparent;
+}
+
+.hist-bar {
+  fill: var(--lap);
+}
+
+.hist-bar.is-active {
+  fill: var(--accent-ink);
+}
+
+.hist-axis {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.hist-knee {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.hist-zero {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+
+.hist-label {
+  font-size: 11px;
+  fill: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-side {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink-2);
+}
+
+.hist-stats {
+  margin-top: 0.3rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}

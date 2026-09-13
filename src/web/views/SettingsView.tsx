@@ -208,7 +208,11 @@ export function SettingsView() {
             <dt>Last packet</dt>
             <dd>{status?.lastPacketAt ? new Date(status.lastPacketAt).toLocaleTimeString() : 'None yet'}</dd>
             <dt>Recording</dt>
-            <dd>{status?.recording ?? 'Off (start with --record)'}</dd>
+            <dd>
+              {status?.recording
+                ? `On: ${status.recording.name}`
+                : 'Off. Use Record telemetry on the Live or Sessions page.'}
+            </dd>
             <dt>Packets by type</dt>
             <dd>
               {status && Object.keys(status.packetCounts).length > 0

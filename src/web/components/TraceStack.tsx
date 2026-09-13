@@ -19,6 +19,13 @@ export interface TracePanel {
   format: (value: number) => string;
   /** 'delta' draws one line with gained/lost fills either side of zero. */
   kind?: 'line' | 'step' | 'delta';
+  /** CSS custom properties for the fills above and below zero on 'delta' panels. */
+  fills?: [string, string];
+}
+
+export interface TraceMarker {
+  distance: number;
+  label: string;
 }
 
 export interface TraceStackProps {
@@ -27,6 +34,8 @@ export interface TraceStackProps {
   lapLabel: string;
   referenceLabel?: string | null;
   corners?: Corner[];
+  /** Events drawn as small triangles along the top of every panel and named in the readout. */
+  markers?: TraceMarker[];
   /** Live position marker, read on every redraw. */
   markerRef?: { current: number | null };
   /** Bump to push new data into the existing charts without rebuilding them. */
@@ -55,15 +64,15 @@ function panelData(panel: TracePanel, distance: number[]): uPlot.AlignedData {
   return [distance, fit(panel.reference, n), fit(panel.lap, n)] as uPlot.AlignedData;
 }
 
-function deltaFill(u: uPlot, colors: ChartColors): CanvasGradient | string {
+function deltaFill(u: uPlot, above: string, below: string): CanvasGradient | string {
   const { top, height } = u.bbox;
-  if (!height) return colors.badWash;
+  if (!height) return above;
   const stop = Math.min(1, Math.max(0, (u.valToPos(0, 'y', true) - top) / height));
   const gradient = u.ctx.createLinearGradient(0, top, 0, top + height);
-  gradient.addColorStop(0, colors.badWash);
-  gradient.addColorStop(stop, colors.badWash);
-  gradient.addColorStop(stop, colors.goodWash);
-  gradient.addColorStop(1, colors.goodWash);
+  gradient.addColorStop(0, above);
+  gradient.addColorStop(stop, above);
+  gradient.addColorStop(stop, below);
+  gradient.addColorStop(1, below);
   return gradient;
 }
 
@@ -74,6 +83,7 @@ function drawOverlays(
   showLabels: boolean,
   marker: number | null,
   isDelta: boolean,
+  markers: TraceMarker[],
 ): void {
   const ctx = u.ctx;
   const { left, top, width, height } = u.bbox;
@@ -108,6 +118,18 @@ function drawOverlays(
       lastLabelRight = x + labelWidth / 2;
     }
   }
+  ctx.fillStyle = colors.ink2;
+  for (const event of markers) {
+    const x = Math.round(u.valToPos(event.distance, 'x', true));
+    if (x < left || x > left + width) continue;
+    const size = 5 * px;
+    ctx.beginPath();
+    ctx.moveTo(x - size, top);
+    ctx.lineTo(x + size, top);
+    ctx.lineTo(x, top + size * 1.6);
+    ctx.closePath();
+    ctx.fill();
+  }
   if (marker !== null) {
     const x = Math.round(u.valToPos(marker, 'x', true));
     if (x >= left && x <= left + width) {
@@ -133,7 +155,9 @@ export function TraceStack(props: TraceStackProps) {
   latest.current = props;
   const [showTable, setShowTable] = useState(false);
 
-  const panelKey = panels.map((p) => `${p.id}:${p.kind ?? 'line'}:${p.reference ? 'ref' : ''}:${p.height}`).join('|');
+  const panelKey = panels
+    .map((p) => `${p.id}:${p.kind ?? 'line'}:${p.reference ? 'ref' : ''}:${p.height}:${p.fills?.join(',') ?? ''}`)
+    .join('|');
   const hasReference = panels.some((p) => p.reference && p.kind !== 'delta');
 
   useEffect(() => {
@@ -169,6 +193,8 @@ export function TraceStack(props: TraceStackProps) {
         parts.push(item);
       };
       add('distance', formatDistance(current.distance[idx]));
+      const nearby = (current.markers ?? []).filter((m) => Math.abs(m.distance - current.distance[idx]) <= 15);
+      if (nearby.length) add('event here', nearby.map((m) => m.label).join(', '));
       for (const panel of current.panels) {
         const lapValue = panel.lap[idx];
         const refValue = panel.reference?.[idx];
@@ -187,7 +213,11 @@ export function TraceStack(props: TraceStackProps) {
       const paths = panel.kind === 'step' ? uPlot.paths.stepped?.({ align: 1 }) : undefined;
       const series: uPlot.Series[] = [{}];
       if (panel.kind === 'delta') {
-        series.push({ stroke: colors.ink2, width: 2, fill: (u) => deltaFill(u, colors), fillTo: 0, points: { show: false } });
+        const style = getComputedStyle(document.documentElement);
+        const [above, below] = panel.fills
+          ? panel.fills.map((name) => style.getPropertyValue(name).trim())
+          : [colors.badWash, colors.goodWash];
+        series.push({ stroke: colors.ink2, width: 2, fill: (u) => deltaFill(u, above, below), fillTo: 0, points: { show: false } });
       } else {
         if (panel.reference) series.push({ stroke: colors.reference, width: 2, paths, points: { show: false } });
         series.push({ stroke: colors.lap, width: 2, paths, points: { show: false } });
@@ -227,7 +257,7 @@ export function TraceStack(props: TraceStackProps) {
               ...axisBase,
               size: 72,
               space: 22,
-              ...(panel.kind === 'delta' ? { incrs: [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10] } : {}),
+              ...(panel.kind === 'delta' ? { incrs: [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20, 25, 50, 100] } : {}),
               values: (_u, v) => v.map((value) => panel.format(value)),
             },
           ],
@@ -242,6 +272,7 @@ export function TraceStack(props: TraceStackProps) {
                   i === 0,
                   latest.current.markerRef?.current ?? null,
                   panel.kind === 'delta',
+                  latest.current.markers ?? [],
                 ),
             ],
             setCursor: [(u) => updateReadout(u)],

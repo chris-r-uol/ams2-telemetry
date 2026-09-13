@@ -2,6 +2,12 @@
  * Loads stored laps, resamples them onto a distance grid and runs the coaching
  * analysis, with small caches so the UI can click around freely.
  */
+import {
+  analyseChassis,
+  chassisLapSeries,
+  type ChassisAnalysis,
+  type ChassisLapSeries,
+} from '../shared/analysis/chassis.ts';
 import { compareLaps, type LapComparison } from '../shared/analysis/coach.ts';
 import { detectCorners, type Corner } from '../shared/analysis/corners.ts';
 import { DEFAULT_STEP_METRES, resampleByDistance, type ResampledLap } from '../shared/analysis/resample.ts';
@@ -19,6 +25,11 @@ export interface Reference {
 
 export interface InsightsResult {
   insights: SessionInsights;
+  corners: Corner[];
+}
+
+export interface ChassisResult {
+  analysis: ChassisAnalysis;
   corners: Corner[];
 }
 
@@ -43,6 +54,7 @@ export class AnalysisService {
   private readonly store: SessionStore;
   private readonly laps = new Map<string, AnalysedLap>();
   private readonly insightCache = new Map<string, { updatedAt: number; lapCount: number; result: InsightsResult }>();
+  private readonly chassisCache = new Map<string, { updatedAt: number; lapCount: number; result: ChassisResult }>();
   private liveSession: () => SessionMeta | null = () => null;
 
   constructor(store: SessionStore) {
@@ -65,6 +77,7 @@ export class AnalysisService {
   forget(sessionId: string): void {
     for (const key of [...this.laps.keys()]) if (key.startsWith(`${sessionId}:`)) this.laps.delete(key);
     this.insightCache.delete(sessionId);
+    this.chassisCache.delete(sessionId);
   }
 
   lap(sessionId: string, lapNumber: number): AnalysedLap | null {
@@ -109,6 +122,27 @@ export class AnalysisService {
       corners,
       comparison: compareLaps(lap.resampled, reference.resampled, corners, refLapNumber),
     };
+  }
+
+  /** Balance, suspension and damper analysis over every lap of a session (uses the raw, time-based traces). */
+  chassis(sessionId: string): ChassisResult | null {
+    const session = this.session(sessionId);
+    if (!session) return null;
+    const cached = this.chassisCache.get(sessionId);
+    if (cached && cached.updatedAt === session.updatedAt && cached.lapCount === session.laps.length) return cached.result;
+    const laps = session.laps
+      .map((summary) => this.store.loadLap(sessionId, summary.lap))
+      .filter((lap): lap is StoredLap => lap !== null);
+    const corners = this.insights(sessionId)?.corners ?? [];
+    const result = { analysis: analyseChassis(laps, corners), corners };
+    this.chassisCache.set(sessionId, { updatedAt: session.updatedAt, lapCount: session.laps.length, result });
+    return result;
+  }
+
+  chassisLap(sessionId: string, lapNumber: number): ChassisLapSeries | null {
+    const chassis = this.chassis(sessionId);
+    const stored = chassis ? this.store.loadLap(sessionId, lapNumber) : null;
+    return chassis && stored ? chassisLapSeries(stored, chassis.analysis) : null;
   }
 
   bestReference(track: TrackInfo, car: string, excludeSessionId?: string): Reference | null {

@@ -55,6 +55,7 @@ const server = spawn(
     '--speed', '2',
     '--port', String(PORT),
     '--data', dataDir,
+    '--recordings', join(dataDir, 'recordings'),
   ],
   { stdio: ['ignore', 'inherit', 'inherit'] },
 );
@@ -87,6 +88,22 @@ async function capture(page: Page, name: string): Promise<void> {
   const file = join(OUT, `${name}.png`);
   await page.screenshot({ path: file });
   console.log(`  ✓ ${file}`);
+}
+
+/** Screenshot a single card, found by its heading. */
+async function captureCard(page: Page, heading: string, name: string): Promise<void> {
+  const file = join(OUT, `${name}.png`);
+  // Unpin the header so it can't sit on top of the card being captured.
+  await page.addStyleTag({ content: '.app-header { position: static !important; }' });
+  const card = page.locator('section.card', { has: page.getByRole('heading', { name: heading, exact: true }) });
+  await card.scrollIntoViewIfNeeded();
+  await sleep(500);
+  await card.screenshot({ path: file });
+  console.log(`  ✓ ${file}`);
+}
+
+async function post(path: string): Promise<void> {
+  await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
 }
 
 try {
@@ -125,6 +142,24 @@ try {
   await sleep(800);
   await capture(coach.page, 'coach');
   await coach.context.close();
+
+  const setup = await open(`#/setup/${session.id}/${lastClean.lap}`, { height: 1200 });
+  await setup.page.waitForSelector('.hint-list');
+  await setup.page.waitForSelector('.trace-panel .u-over');
+  await sleep(1200);
+  await captureCard(setup.page, 'What the data suggests', 'setup-hints');
+  await captureCard(setup.page, 'Balance and grip', 'setup-balance');
+  await captureCard(setup.page, 'Damper movement', 'setup-dampers');
+  await setup.context.close();
+
+  console.log('Recording a few seconds of raw telemetry…');
+  await post('/api/recordings/start');
+  await sleep(6000);
+  await post('/api/recordings/stop');
+  const sessions = await open('#/sessions', { height: 1000 });
+  await sessions.page.waitForSelector('.recording-file');
+  await captureCard(sessions.page, 'Raw telemetry recordings', 'recordings');
+  await sessions.context.close();
 
   const detail = await open(`#/sessions/${session.id}`, { height: 900 });
   await detail.page.waitForSelector('.laptime-chart svg');

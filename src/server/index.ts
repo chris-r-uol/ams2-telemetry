@@ -21,8 +21,8 @@ import { AnalysisService } from './analysis-service.ts';
 import { DemoSimulator } from './demo/simulator.ts';
 import { createRequestHandler } from './http.ts';
 import { attachLiveSocket } from './live-socket.ts';
+import { RecordingManager } from './recordings.ts';
 import { SessionManager } from './session-manager.ts';
-import { PacketRecorder } from './sources/recorder.ts';
 import { startReplay } from './sources/replay.ts';
 import { startUdpSource } from './sources/udp.ts';
 import { SessionStore } from './storage.ts';
@@ -43,7 +43,9 @@ Sources
   --speed <n>                 Playback speed for demo/replay (default: 1)
   --loop                      Loop the replay
   --prefill <laps>            Demo: simulate this many laps instantly before going live
-  --record                    Save raw packets to recordings/ for replaying later
+  --record                    Start recording raw packets immediately
+                              (you can also press Record in the dashboard)
+  --recordings <dir>          Where recordings are saved (default: ./recordings)
 
 Dashboard
   --port <port>               HTTP port for the dashboard (default: 8606)
@@ -65,6 +67,7 @@ const { values } = parseArgs({
     loop: { type: 'boolean', default: false },
     prefill: { type: 'string', default: '0' },
     record: { type: 'boolean', default: false },
+    recordings: { type: 'string', default: join(ROOT, 'recordings') },
     port: { type: 'string', short: 'p', default: '8606' },
     host: { type: 'string', default: '127.0.0.1' },
     rate: { type: 'string', default: '20' },
@@ -92,17 +95,31 @@ const port = Number(values.port);
 const udpPort = Number(values['udp-port']);
 const speed = Math.max(0.1, Number(values.speed) || 1);
 const frameRate = Math.min(60, Math.max(1, Number(values.rate) || 20));
+const dataDir = resolve(values.data!);
 
-const store = new SessionStore(resolve(values.data!));
+const store = new SessionStore(dataDir);
 const analysis = new AnalysisService(store);
 const hub = new TelemetryHub();
 const manager = new SessionManager(hub, store, analysis, source);
 
-const recorder = values.record
-  ? new PacketRecorder(join(ROOT, 'recordings', `${new Date().toISOString().replace(/[:.]/g, '-')}.ams2rec`))
-  : null;
+const recordings = new RecordingManager({
+  dir: resolve(values.recordings!),
+  settingsFile: join(dataDir, 'settings.json'),
+  appVersion: version,
+  priming: () => hub.primingPackets(),
+  context: () => ({
+    track: hub.context.track ? [hub.context.track.location, hub.context.track.variation].filter(Boolean).join(' ') : null,
+    car: hub.context.car || null,
+    sessionId: manager.session?.id ?? null,
+  }),
+});
+if (values.record) recordings.start();
+// Re-recording a replay would only duplicate the file you're playing.
+if (source !== 'replay') manager.onSession((session) => void recordings.sessionChanged(session.id));
+setInterval(() => recordings.idleCheck(), 5000).unref();
+
 const ingest = (bytes: Uint8Array, at: number = Date.now()) => {
-  recorder?.write(bytes, at);
+  recordings.write(bytes, at);
   hub.ingest(bytes, at);
 };
 
@@ -160,7 +177,7 @@ const status = (): SourceStatus => ({
   packetsPerSecond: hub.packetsPerSecond,
   packetCounts: hub.packetCounts,
   lastPacketAt: hub.lastPacketAt,
-  recording: recorder?.path ?? null,
+  recording: recordings.status,
 });
 
 const server = createServer();
@@ -180,7 +197,16 @@ if (values.dev) {
 
 server.on(
   'request',
-  createRequestHandler({ store, analysis, manager, status, version, staticDir: join(ROOT, 'dist', 'web'), vite }),
+  createRequestHandler({
+    store,
+    analysis,
+    manager,
+    recordings,
+    status,
+    version,
+    staticDir: join(ROOT, 'dist', 'web'),
+    vite,
+  }),
 );
 const live = attachLiveSocket(server, { manager, hub, status, version, frameRate });
 
@@ -191,12 +217,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 
 server.listen(port, values.host, () => {
   const local = `http://localhost:${port}`;
-  const lines = [
-    '',
-    `  AMS2 Telemetry Coach ${version}`,
-    '',
-    `  Dashboard   ${local}`,
-  ];
+  const lines = ['', `  AMS2 Telemetry Coach ${version}`, '', `  Dashboard   ${local}`];
   if (values.host === '0.0.0.0') {
     for (const address of Object.values(networkInterfaces()).flat()) {
       if (address && address.family === 'IPv4' && !address.internal) lines.push(`              http://${address.address}:${port}`);
@@ -204,7 +225,7 @@ server.listen(port, values.host, () => {
   }
   lines.push(`  Source      ${sourceDetail}`);
   lines.push(`  Sessions    ${store.root}`);
-  if (recorder) lines.push(`  Recording   ${recorder.path}`);
+  lines.push(`  Recordings  ${recordings.dir}${recordings.status ? ' (recording now)' : recordings.autoRecord ? ' (recording every session)' : ''}`);
   if (source === 'udp') {
     lines.push('', '  In AMS2: Options → System → UDP Frequency 1, UDP Protocol Version "Project CARS 2"');
   }
@@ -231,7 +252,8 @@ async function shutdown(): Promise<void> {
   stopSource();
   live.close();
   server.close();
-  await recorder?.close();
+  const saved = await recordings.stop();
+  if (saved) console.log(`  Saved recording ${saved.name}`);
   await vite?.close();
   process.exit(0);
 }

@@ -3,7 +3,7 @@ import { formatLapTime, formatSectorTime, SESSION_LABELS, speedIn, speedLabel, t
 import type { LapSummary, SessionMeta } from '../../shared/model/types.ts';
 import { bestLap, bestSectors, formatSessionDate, isCoachable, LapStatus, sessionTitle } from '../components/laps.tsx';
 import { Card, DeltaValue, EmptyState, Stat } from '../components/ui.tsx';
-import { api, useApi, type InsightsDto } from '../lib/api.ts';
+import { api, sendJson, useApi, type InsightsDto } from '../lib/api.ts';
 import { useLive } from '../lib/live.ts';
 import { href, navigate } from '../lib/router.ts';
 import { useSettings } from '../lib/settings.ts';
@@ -55,8 +55,12 @@ export function SessionView({ id }: { id: string }) {
 
   const remove = async () => {
     if (!window.confirm(`Delete this session and its ${s.laps.length} laps? This can't be undone.`)) return;
-    const response = await fetch(api.session(id), { method: 'DELETE' });
-    if (response.ok) navigate({ name: 'sessions' });
+    try {
+      await sendJson(api.session(id), 'DELETE');
+      navigate({ name: 'sessions' });
+    } catch (err) {
+      window.alert((err as Error).message);
+    }
   };
 
   return (
@@ -73,6 +77,12 @@ export function SessionView({ id }: { id: string }) {
         <div className="page-actions">
           <a className="btn is-primary" href={href({ name: 'coach', id })}>
             Coach this session
+          </a>
+          <a className="btn" href={href({ name: 'setup', session: id, lap: null, compare: null })}>
+            Car setup
+          </a>
+          <a className="btn" href={api.sessionExport(id)} download>
+            Download lap data
           </a>
           {!isLive && (
             <button type="button" className="btn" onClick={remove}>

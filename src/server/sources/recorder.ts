@@ -7,7 +7,7 @@
  *             u16 LE  packet length
  *             bytes   the UDP payload, untouched
  */
-import { createWriteStream, mkdirSync } from 'node:fs';
+import { createWriteStream, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createGzip, constants as zlib } from 'node:zlib';
 
@@ -23,7 +23,8 @@ export class PacketRecorder {
   constructor(path: string) {
     this.path = path;
     mkdirSync(dirname(path), { recursive: true });
-    this.output = createWriteStream(path);
+    // Open synchronously so the file exists (and shows up in the list) straight away.
+    this.output = createWriteStream(path, { fd: openSync(path, 'w') });
     this.gzip.pipe(this.output);
     this.gzip.write(Buffer.from(RECORDING_MAGIC, 'ascii'));
     // Flush regularly so a crash loses seconds, not the session.

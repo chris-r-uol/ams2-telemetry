@@ -6,6 +6,7 @@
 import {
   OFF_TRACK_TERRAIN,
   PARTICIPANTS_PER_PACKET,
+  TyreFlag,
   type FlagColour,
   type GameState,
   type PitMode,
@@ -17,6 +18,8 @@ import type { ParticipantTiming, TelemetryPacket, TimingsPacket } from '../../sh
 import type { Quad, TrackInfo } from '../../shared/model/types.ts';
 
 const G = 9.80665;
+
+const PRIMING_ORDER: readonly string[] = ['gameState', 'race', 'participants', 'vehicleNames', 'classNames', 'timeStats'];
 
 /** One merged telemetry + timing sample for the viewed car, in app units. */
 export interface Tick {
@@ -47,6 +50,19 @@ export interface Tick {
   latG: number;
   lonG: number;
   offWheels: number;
+  steeringInput: number;
+  yawRate: number;
+  vLat: number;
+  vLon: number;
+  vertG: number;
+  pitch: number;
+  roll: number;
+  suspensionTravel: Quad;
+  damperVelocity: Quad;
+  rideHeight: Quad;
+  wheelRps: Quad;
+  /** Bit n set when wheel n (FL, FR, RL, RR) is touching the ground. */
+  groundedMask: number;
   fuelLitres: number;
   fuelCapacity: number;
   tyreTempC: Quad;
@@ -75,6 +91,15 @@ const quad = (values: number[], scale = 1): Quad => [
   values[2] * scale,
   values[3] * scale,
 ];
+
+/**
+ * AMS2's header documents tyre pressure as PSI, while PC2-era data looks like
+ * kPa. Racing pressures are ~20-40 psi or ~140-280 kPa, so size tells them apart.
+ */
+function pressureScale(values: number[]): number {
+  const max = Math.max(...values);
+  return max > 0 && max < 70 ? 6.894757 : 1;
+}
 
 export function toTick(t: TelemetryPacket, p: ParticipantTiming, viewedIndex: number, at: number): Tick {
   let offWheels = 0;
@@ -106,10 +131,22 @@ export function toTick(t: TelemetryPacket, p: ParticipantTiming, viewedIndex: nu
     latG: t.localAcceleration[0] / G,
     lonG: -t.localAcceleration[2] / G,
     offWheels,
+    steeringInput: t.unfilteredSteering / 127,
+    yawRate: t.angularVelocity[1],
+    vLat: t.localVelocity[0],
+    vLon: t.localVelocity[2],
+    vertG: t.localAcceleration[1] / G,
+    pitch: t.orientation[0],
+    roll: t.orientation[2],
+    suspensionTravel: quad(t.suspensionTravel),
+    damperVelocity: quad(t.suspensionVelocity),
+    rideHeight: quad(t.rideHeight),
+    wheelRps: quad(t.tyreRps),
+    groundedMask: t.tyreFlags.reduce((mask, flags, w) => mask | ((flags & TyreFlag.OnGround ? 1 : 0) << w), 0),
     fuelLitres: t.fuelLevel * t.fuelCapacity,
     fuelCapacity: t.fuelCapacity,
     tyreTempC: quad(t.tyreTemp),
-    tyrePressureKPa: quad(t.airPressure),
+    tyrePressureKPa: quad(t.airPressure, pressureScale(t.airPressure)),
     tyreWear: quad(t.tyreWear, 1 / 255),
     brakeTempC: quad(t.brakeTempCelsius),
     compound: t.tyreCompound[0] ?? '',
@@ -132,6 +169,8 @@ export class TelemetryHub {
   readonly packetCounts: Record<string, number> = {};
   lastPacketAt: number | null = null;
 
+  /** Latest copy of each slow-changing packet, so a recording started mid-session stands alone. */
+  private readonly latestRaw = new Map<string, Uint8Array>();
   private timings: TimingsPacket | null = null;
   private viewedIndex = 0;
   private lastOfficialLapTime = -1;
@@ -155,6 +194,14 @@ export class TelemetryHub {
     return () => this.lapTimeListeners.delete(listener);
   }
 
+  /** Track, names, game state and time stats as last received, in a sensible replay order. */
+  primingPackets(): Uint8Array[] {
+    const rank = (key: string) => PRIMING_ORDER.indexOf(key.slice(0, key.indexOf(':')) as (typeof PRIMING_ORDER)[number]);
+    return [...this.latestRaw.entries()]
+      .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+      .map(([, bytes]) => bytes);
+  }
+
   get packetsPerSecond(): number {
     return this.lastPacketAt !== null && Date.now() - this.lastPacketAt < 2000 ? this.rate : 0;
   }
@@ -168,6 +215,9 @@ export class TelemetryHub {
     }
     this.count(packet.kind);
     this.lastPacketAt = at;
+    if (PRIMING_ORDER.includes(packet.kind)) {
+      this.latestRaw.set(`${packet.kind}:${packet.header.partialPacketIndex}`, bytes.slice());
+    }
     const ctx = this.context;
 
     switch (packet.kind) {

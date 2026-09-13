@@ -22,6 +22,31 @@ export const TRACE_CHANNELS = [
   'latG', // lateral acceleration, g
   'lonG', // longitudinal acceleration, g (+ accelerating)
   'off', // number of wheels on an off-track surface
+  // Chassis channels (see analysis/chassis.ts). Laps saved before these existed won't have them.
+  'steerIn', // driver's unfiltered steering input, -1..1
+  'yawRate', // rad/s
+  'vLat', // local x velocity, m/s
+  'vLon', // local z velocity, m/s
+  'vertG', // local vertical acceleration, g
+  'pitch', // rad
+  'roll', // rad
+  'travelFL', // suspension travel, m, as sent
+  'travelFR',
+  'travelRL',
+  'travelRR',
+  'damperFL', // suspension velocity, m/s, as sent
+  'damperFR',
+  'damperRL',
+  'damperRR',
+  'rideFL', // ride height, as sent (AMS2 documents cm)
+  'rideFR',
+  'rideRL',
+  'rideRR',
+  'wheelFL', // wheel rotation, rev/s
+  'wheelFR',
+  'wheelRL',
+  'wheelRR',
+  'grounded', // bit per wheel (FL=1, FR=2, RL=4, RR=8) when touching the ground
 ] as const;
 
 export type TraceChannel = (typeof TRACE_CHANNELS)[number];
@@ -152,13 +177,34 @@ export interface LapFeedback {
   tips: CoachTip[];
 }
 
+export interface RecordingStatus {
+  name: string;
+  startedAt: number;
+  packets: number;
+  /** Uncompressed bytes captured so far. */
+  bytes: number;
+  /** Started by "record every session" rather than by hand. */
+  auto: boolean;
+}
+
+export interface RecordingInfo {
+  name: string;
+  sizeBytes: number;
+  startedAt: number;
+  durationMs: number | null;
+  packets: number | null;
+  track: string | null;
+  car: string | null;
+  active: boolean;
+}
+
 export interface SourceStatus {
   source: SourceKind;
   detail: string;
   packetsPerSecond: number;
   packetCounts: Record<string, number>;
   lastPacketAt: number | null;
-  recording: string | null;
+  recording: RecordingStatus | null;
 }
 
 export type ServerMessage =

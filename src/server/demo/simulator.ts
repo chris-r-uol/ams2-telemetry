@@ -20,6 +20,7 @@ import {
   type HeaderInput,
 } from '../../shared/protocol/encode.ts';
 import {
+  circularOffset,
   computeLap,
   findDemoCorners,
   G,
@@ -38,6 +39,8 @@ export interface DemoOptions {
   tickRate?: number;
 }
 
+type Quad4 = [number, number, number, number];
+
 interface Sample {
   d: number;
   speed: number;
@@ -52,6 +55,21 @@ interface Sample {
   x: number;
   z: number;
   heading: number;
+}
+
+interface ChassisState {
+  steering: number;
+  yawRate: number;
+  vLat: number;
+  vLon: number;
+  vertG: number;
+  pitch: number;
+  roll: number;
+  travel: Quad4;
+  damper: Quad4;
+  rideCm: Quad4;
+  wheelRps: Quad4;
+  tyreFlags: Quad4;
 }
 
 export interface DemoHabits {
@@ -73,7 +91,12 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+const q = (make: (w: number) => number): Quad4 => [make(0), make(1), make(2), make(3)];
+
 const COMPOUND = 'Slick Medium';
+const WHEEL_RADIUS = 0.33;
+const STATIC_TRAVEL = [0.045, 0.045, 0.05, 0.05];
+const MAX_TRAVEL = [0.092, 0.092, 0.1, 0.1];
 
 export class DemoSimulator {
   readonly track: DemoTrack;
@@ -87,6 +110,7 @@ export class DemoSimulator {
   private readonly tickRate: number;
   private readonly rng: () => number;
   private readonly regionOf: Int16Array;
+  private plan: LapPlan;
   private profile: LapProfile;
   private lapIndex = 0;
   private lapTime = 0;
@@ -102,6 +126,7 @@ export class DemoSimulator {
   private readonly tyreTemp = [38, 38, 36, 36];
   private readonly brakeTemp = [120, 120, 100, 100];
   private readonly wear = [0, 0, 0, 0];
+  private readonly previousTravel = [...STATIC_TRAVEL];
   private packetNumber = 0;
   private readonly categoryNumbers = new Array<number>(9).fill(0);
   private nextSlowPacketsAt = 0;
@@ -118,7 +143,8 @@ export class DemoSimulator {
     this.corners = found.corners;
     this.regionOf = found.regionOf;
     this.habits = this.chooseHabitCorners();
-    this.profile = computeLap(this.track, this.corners, this.regionOf, this.planFor(0));
+    this.plan = this.planFor(0);
+    this.profile = computeLap(this.track, this.corners, this.regionOf, this.plan);
   }
 
   /** Stream packets in real time (scaled by `speed`). */
@@ -171,6 +197,7 @@ export class DemoSimulator {
     if (this.profile.invalidFrom !== null && s.d >= this.profile.invalidFrom) this.invalid = true;
 
     this.updateCar(dt, s);
+    const chassis = this.chassisState(s, dt);
     if (this.sessionTime >= this.nextSlowPacketsAt) {
       this.emitGameState();
       this.emitRace();
@@ -180,7 +207,7 @@ export class DemoSimulator {
       this.emitNames();
       this.nextNamesAt = this.sessionTime + 10;
     }
-    this.emitTelemetry(s);
+    this.emitTelemetry(s, chassis);
     this.emitTimings(s);
   }
 
@@ -197,7 +224,8 @@ export class DemoSimulator {
     this.sectorStart = 0;
     this.invalid = false;
     this.lapIndex++;
-    this.profile = computeLap(this.track, this.corners, this.regionOf, this.planFor(this.lapIndex));
+    this.plan = this.planFor(this.lapIndex);
+    this.profile = computeLap(this.track, this.corners, this.regionOf, this.plan);
     this.emitTimeStats();
   }
 
@@ -252,10 +280,16 @@ export class DemoSimulator {
     };
     // Recurring habits, so the coach has something real to find.
     set(this.habits.lateBraking, r() < 0.75 ? { brake: 0.72 + 0.1 * r() } : { brake: 0.99 });
-    set(this.habits.lateThrottle, r() < 0.7 ? { throttleDelay: 22 + 25 * r() } : { throttleDelay: 2 });
+    const lazyThrottle = r() < 0.7;
+    const throttleDelay = lazyThrottle ? 22 + 25 * r() : 2;
+    set(this.habits.lateThrottle, lap % 3 === 2 ? { throttleDelay: 2, wheelspin: true } : { throttleDelay });
     set(this.habits.slowApex, r() < 0.6 ? { apex: 0.92 + 0.04 * r() } : { apex: 0.998 });
     set(this.habits.coasting, r() < 0.55 ? { coast: 30 + 25 * r() } : {});
     if (lap === 5) set(this.habits.offTrack, { off: true });
+    // Chassis moments for the car setup page.
+    if (lap % 2 === 0) set(this.habits.lateBraking, { lockUp: true });
+    if (lap % 3 === 1) set(this.habits.coasting, { snap: true });
+    if (lap % 2 === 1) set(this.habits.slowApex, { kerb: true });
     const warm = Math.min(1, lap / 4);
     return { grip: 0.955 + 0.04 * warm + 0.006 * (r() - 0.5), power: 1, pitExit: false, corners };
   }
@@ -291,6 +325,68 @@ export class DemoSimulator {
     };
   }
 
+  /** Road surface under a wheel, m: gentle undulation plus a bumpy braking zone. */
+  private road(d: number, wheel: number): number {
+    const n = this.track.x.length;
+    const base = 0.0012 * Math.sin(d * 0.45 + wheel) + 0.0003 * Math.sin(d * 1.3 + wheel * 2);
+    const corner = this.corners[this.habits.lateBraking];
+    if (!corner) return base;
+    const index = ((Math.floor(d / this.track.step) % n) + n) % n;
+    const toApex = circularOffset(index, corner.apexIndex, n) * this.track.step;
+    return base + (toApex > -230 && toApex < -40 ? 0.011 * Math.max(0, Math.sin(d * 0.3)) : 0);
+  }
+
+  /** Suspension, wheel speeds, yaw and slip for the current sample, including the driver's chassis moments. */
+  private chassisState(s: Sample, dt: number): ChassisState {
+    const n = this.track.x.length;
+    const step = this.track.step;
+    const index = Math.min(n - 1, Math.max(0, Math.floor(s.d / step)));
+    const cornerIndex = this.regionOf[index];
+    const habit = this.plan.corners[cornerIndex];
+    const rel = circularOffset(index, this.corners[cornerIndex].apexIndex, n) * step;
+    const kappa = this.track.curvature[index];
+    const leftTurn = kappa > 0;
+    const v = s.speed;
+
+    const snap = !!habit?.snap && rel > 10 && rel < 45;
+    const lockUp = !!habit?.lockUp && s.brake > 0.35 && rel > -200 && rel < -40;
+    const spin = !!habit?.wheelspin && s.throttle > 0.5 && rel > 15 && rel < 70;
+    const kerb = !!habit?.kerb && rel > -4 && rel < 6;
+
+    const travel = q((w) => {
+      const front = w < 2;
+      const left = w % 2 === 0;
+      const inside = left === leftTurn;
+      const aero = (front ? 2.1e-6 : 1.6e-6) * v * v;
+      const pitch = s.lonG < 0 ? (front ? 0.009 : -0.009) * -s.lonG : (front ? -0.004 : 0.007) * s.lonG;
+      // Positive latG (left turn) loads the right-hand side.
+      const roll = (front ? 0.01 : 0.008) * s.latG * (left ? -1 : 1);
+      const kerbHit = kerb ? (inside ? -0.015 : 0.006) : 0;
+      const raw = STATIC_TRAVEL[w] + aero + pitch + roll + kerbHit + this.road(s.d - (front ? 0 : 2.7), w);
+      return Math.max(0.004, Math.min(MAX_TRAVEL[w], raw));
+    });
+    const damper = q((w) => (travel[w] - this.previousTravel[w]) / dt);
+    travel.forEach((t, w) => (this.previousTravel[w] = t));
+
+    const baseRps = v / (2 * Math.PI * WHEEL_RADIUS);
+    const slip = 0.009 * s.latG + (snap ? 0.1 * Math.sign(kappa || 1) : 0);
+    return {
+      steering: snap ? s.steering * -0.35 : s.steering,
+      yawRate: v * kappa * (snap ? 1.35 : 1),
+      vLat: v * Math.sin(slip),
+      vLon: -v * Math.cos(slip),
+      vertG: ((this.road(s.d + 1, 0) - 2 * this.road(s.d, 0) + this.road(s.d - 1, 0)) * v * v) / G,
+      pitch: 0.0035 * s.lonG,
+      roll: 0.005 * s.latG,
+      travel,
+      damper,
+      // AMS2 documents ride height in centimetres.
+      rideCm: q((w) => Math.max(0, w < 2 ? 4.9 - (travel[w] - STATIC_TRAVEL[w]) * 100 : 7 - (travel[w] - STATIC_TRAVEL[w]) * 90)),
+      wheelRps: q((w) => baseRps * (lockUp && w === 0 ? 0.55 : spin && w >= 2 ? 1.25 : 1)),
+      tyreFlags: q((w) => (kerb && (w % 2 === 0) === leftTurn ? 3 : 7)),
+    };
+  }
+
   private updateCar(dt: number, s: Sample): void {
     const load = Math.abs(s.latG) + Math.abs(s.lonG) * 0.7;
     for (let w = 0; w < 4; w++) {
@@ -316,14 +412,13 @@ export class DemoSimulator {
     };
   }
 
-  private emitTelemetry(s: Sample): void {
-    const wheelRps = s.speed / (2 * Math.PI * 0.33);
+  private emitTelemetry(s: Sample, c: ChassisState): void {
     this.emit(
       encodeTelemetry(this.header(PacketType.CarPhysics), {
         viewedParticipantIndex: 0,
         unfilteredThrottle: s.throttle * 255,
         unfilteredBrake: s.brake * 255,
-        unfilteredSteering: s.steering * 127,
+        unfilteredSteering: c.steering * 127,
         carFlags: CarFlag.EngineActive,
         oilTempCelsius: 104,
         oilPressureKPa: 430,
@@ -337,21 +432,25 @@ export class DemoSimulator {
         speed: s.speed,
         rpm: s.rpm,
         maxRpm: MAX_RPM,
-        steering: s.steering * 127,
+        steering: c.steering * 127,
         gearNumGears: (6 << 4) | s.gear,
         odometerKm: this.odometer / 1000,
-        orientation: [0, s.heading, 0],
-        localVelocity: [0, 0, -s.speed],
+        orientation: [c.pitch, s.heading, c.roll],
+        localVelocity: [c.vLat, 0, c.vLon],
         worldVelocity: [Math.cos(s.heading) * s.speed, 0, Math.sin(s.heading) * s.speed],
-        localAcceleration: [s.latG * G, 0, -s.lonG * G],
-        tyreFlags: [7, 7, 7, 7],
+        angularVelocity: [0, c.yawRate, 0],
+        localAcceleration: [s.latG * G, c.vertG * G, -s.lonG * G],
+        tyreFlags: c.tyreFlags,
         terrain: s.off ? [7, 7, 7, 7] : [0, 0, 0, 0],
-        tyreRps: [wheelRps, wheelRps, wheelRps, wheelRps],
-        tyreTemp: [0, 1, 2, 3].map((w) => Math.round(this.tyreTemp[w])) as [number, number, number, number],
-        tyreWear: [0, 1, 2, 3].map((w) => this.wear[w] * 255) as [number, number, number, number],
-        brakeTempCelsius: [0, 1, 2, 3].map((w) => this.brakeTemp[w]) as [number, number, number, number],
-        tyreTreadTemp: [0, 1, 2, 3].map((w) => this.tyreTemp[w] + 273.15) as [number, number, number, number],
-        airPressure: [0, 1, 2, 3].map((w) => 138 + this.tyreTemp[w] * 0.5) as [number, number, number, number],
+        tyreRps: c.wheelRps,
+        tyreTemp: q((w) => Math.round(this.tyreTemp[w])),
+        tyreWear: q((w) => this.wear[w] * 255),
+        brakeTempCelsius: q((w) => this.brakeTemp[w]),
+        tyreTreadTemp: q((w) => this.tyreTemp[w] + 273.15),
+        airPressure: q((w) => 138 + this.tyreTemp[w] * 0.5),
+        rideHeight: c.rideCm,
+        suspensionTravel: c.travel,
+        suspensionVelocity: c.damper,
         engineSpeed: (s.rpm * Math.PI) / 30,
         tyreCompound: [COMPOUND, COMPOUND, COMPOUND, COMPOUND],
         fullPosition: [s.x, 0, s.z],

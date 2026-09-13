@@ -3,6 +3,7 @@ import { formatLapTime, SESSION_LABELS } from '../../shared/format.ts';
 import type { SessionMeta } from '../../shared/model/types.ts';
 import { bestLap, formatSessionDate, isCoachable, sessionTitle } from '../components/laps.tsx';
 import { Card, EmptyState } from '../components/ui.tsx';
+import { RecordingsCard } from '../components/RecordingsCard.tsx';
 import { api, useApi } from '../lib/api.ts';
 import { useLive } from '../lib/live.ts';
 import { href } from '../lib/router.ts';
@@ -38,9 +39,12 @@ export function SessionsView() {
   const list = sessions.data;
   if (list.length === 0) {
     return (
-      <EmptyState title="No sessions yet">
-        <p>Every lap you drive is saved automatically. Head out on track and your sessions will appear here.</p>
-      </EmptyState>
+      <div className="page">
+        <EmptyState title="No sessions yet">
+          <p>Every lap you drive is saved automatically. Head out on track and your sessions will appear here.</p>
+        </EmptyState>
+        <RecordingsCard />
+      </div>
     );
   }
 
@@ -111,6 +115,8 @@ export function SessionsView() {
           </table>
         </div>
       </Card>
+
+      <RecordingsCard />
     </div>
   );
 }

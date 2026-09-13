@@ -48,9 +48,10 @@ docs/                protocol notes, coaching method, images
 
 ## Reporting a telemetry bug
 
-1. Start with recording on: `npm start -- --record`
-2. Drive until the problem happens, then stop with Ctrl+C.
-3. Attach the file from `recordings/` to your issue and describe what looked wrong.
+1. Press **Record telemetry** (Live or Sessions page), or start with `npm start -- --record`.
+2. Drive until the problem happens, then press **Stop recording**.
+3. Download the file from the recordings list on the Sessions page, attach it to your issue,
+   and describe what looked wrong.
 
 A recording replays the exact packets, so the bug can be reproduced on any machine.
 

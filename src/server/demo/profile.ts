@@ -24,6 +24,11 @@ export interface CornerHabit {
   coast: number;
   /** Run wide over the grass on exit. */
   off: boolean;
+  /** Chassis moments, applied when packets are emitted (they don't change the speed profile). */
+  lockUp?: boolean;
+  wheelspin?: boolean;
+  snap?: boolean;
+  kerb?: boolean;
 }
 
 export interface LapPlan {
@@ -192,7 +197,12 @@ export function computeLap(
     brake[i] = net < -0.6 ? Math.min(1, (-net - 0.4) / (brakeLimit(speed) * plan.grip)) : 0;
     latG[i] = (speed * speed * track.curvature[i]) / G;
     lonG[i] = accel / G;
-    steering[i] = Math.max(-1, Math.min(1, -(track.curvature[i] * 2.7) / 0.16));
+    // Slow corners push (understeer grows with lateral g); fast corners stay close to neutral.
+    const understeerGradient = speed < 35 ? 0.18 : 0.03;
+    steering[i] = Math.max(
+      -1,
+      Math.min(1, (-(track.curvature[i] * 2.7) / 0.16) * (1 + understeerGradient * Math.abs(latG[i]))),
+    );
     let g = 1;
     while (g < 6 && speed > GEAR_TOP[g] * 0.97) g++;
     gear[i] = g;

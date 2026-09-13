@@ -10,14 +10,16 @@ import { LiveView } from './views/LiveView.tsx';
 import { SessionsView } from './views/SessionsView.tsx';
 import { SessionView } from './views/SessionView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
+import { SetupView } from './views/SetupView.tsx';
 
-type Section = 'live' | 'sessions' | 'compare' | 'coach' | 'settings';
+type Section = 'live' | 'sessions' | 'compare' | 'coach' | 'setup' | 'settings';
 
 const TITLES: Record<Section, string> = {
   live: 'Live',
   sessions: 'Sessions',
   compare: 'Compare laps',
   coach: 'Coach',
+  setup: 'Car setup',
   settings: 'Settings',
 };
 
@@ -37,6 +39,8 @@ function View({ route }: { route: Route }) {
       return <CompareView route={route} />;
     case 'coach':
       return <CoachView id={route.id} />;
+    case 'setup':
+      return <SetupView route={route} />;
     case 'settings':
       return <SettingsView />;
   }
@@ -87,6 +91,7 @@ export function App() {
     { section: 'sessions', to: { name: 'sessions' } },
     { section: 'compare', to: { name: 'compare', session: liveSessionId, lap: null, refSession: null, refLap: null } },
     { section: 'coach', to: { name: 'coach', id: liveSessionId } },
+    { section: 'setup', to: { name: 'setup', session: liveSessionId, lap: null, compare: null } },
     { section: 'settings', to: { name: 'settings' } },
   ];
 
