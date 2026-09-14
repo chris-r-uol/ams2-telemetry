@@ -5,7 +5,9 @@
  */
 import {
   analyseRun,
+  bodySlipAngle,
   calibrate,
+  neutralSteering,
   type ChannelAvailability,
   type ChassisCalibration,
   type RunAnalysis,
@@ -169,9 +171,15 @@ export class LiveCoach {
   }
 
   private updateBalance(tick: Tick): void {
-    const k = this.calibration?.calibration.steerPerCurvature ?? null;
-    const need = k !== null && tick.speed >= 12 ? k * (tick.yawRate / tick.speed) : 0;
-    if (k === null || Math.abs(need) < 0.03) {
+    const cal = this.calibration?.calibration ?? null;
+    const need = cal ? neutralSteering(cal, tick.yawRate, tick.speed) : NaN;
+    // Steering already the other way without a slide is a change of direction, not balance.
+    const changingDirection =
+      cal !== null &&
+      cal.slideSlipAngle !== null &&
+      tick.steering * need < 0 &&
+      bodySlipAngle(tick.vLat, tick.vLon, cal.velocityAxesSwapped) < cal.slideSlipAngle;
+    if (!(Math.abs(need) >= 0.03) || changingDirection) {
       if (++this.straightTicks > STRAIGHT_TICKS) this.balance = null;
       return;
     }

@@ -107,10 +107,12 @@ export function decodeParticipantInfo(raw: RawParticipantInfo): ParticipantTimin
     sector: raw.sector & 0x07,
     flagColour: enumName(FLAG_COLOURS, raw.highestFlag >> 2),
     flagReason: raw.highestFlag & 0x03,
-    pitMode: enumName(PIT_MODES, raw.pitModeSchedule >> 2),
-    pitSchedule: raw.pitModeSchedule & 0x03,
-    carIndex: raw.carIndex & 0x7f,
-    isHuman: (raw.carIndex & 0x80) !== 0,
+    // Pit mode in the low three bits, schedule above. Leaving the garage in AMS2 reads 4, 5, 3, 0.
+    pitMode: enumName(PIT_MODES, raw.pitModeSchedule & 0x07),
+    pitSchedule: raw.pitModeSchedule >> 3,
+    // A 16-bit vehicle index with the top bit set for humans. AMS2 sends 0xFFFF for the player, so their car isn't known.
+    carIndex: raw.carIndex & 0x7fff,
+    isHuman: (raw.carIndex & 0x8000) !== 0,
     raceState: enumName(RACE_STATES, raw.raceState & 0x7f),
     lapInvalidated: (raw.raceState & 0x80) !== 0,
     currentLap: raw.currentLap,

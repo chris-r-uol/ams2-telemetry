@@ -44,7 +44,8 @@ two fields overlap and that every layout matches its documented size.
 | `sRaceState` | race state = `& 0x7F`, **lap invalidated = bit 7** |
 | `sSector` | sector = `& 0x07`; bits 4–5 and 6–7 add ¼ m precision to z and x |
 | `sHighestFlag` | colour = `>> 2`, reason = `& 0x03` |
-| `sPitModeSchedule` | pit mode = `>> 2`, schedule = `& 0x03` |
+| `sPitModeSchedule` | pit mode = `& 0x07`, schedule = `>> 3` (checked in AMS2: leaving the garage reads 4, 5, 3, 0) |
+| `sCarIndex` | vehicle index = `& 0x7FFF`, human = bit 15. AMS2 sends `0xFFFF` for the player, so the app asks you which car you're driving |
 | `mGameState` | game state = `& 0x07`, session state = `>> 4` |
 | `sLapsTimeInEvent` | timed session = bit 15; value = laps, or ×5 minutes when timed |
 
@@ -63,7 +64,8 @@ build yet:
 - **Tyre pressure** (`sAirPressure`): AMS2's shared-memory header says PSI, while PC2-era data
   looks like kPa. Values under 70 are treated as PSI, larger ones as kPa.
 - **Chassis channels** used by the [car setup analysis](car-setup.md): `sSuspensionTravel`
-  (metres), `sSuspensionVelocity`, `sRideHeight` (AMS2 documents cm), `sTyreRPS` (rev/s),
+  (metres), `sSuspensionVelocity`, `sRideHeight` (AMS2 documents cm; recordings show metres), `sTyreRPS` (despite
+  the name, AMS2 sends radians per second, negative going forwards),
   `sTyreFlags` (bit 2 = on the ground), `sAngularVelocity` (rad/s), `sLocalVelocity` (m/s)
   and `sOrientation`. Their directions and the ride-height unit are detected from the data
   rather than assumed; the page shows what was detected.

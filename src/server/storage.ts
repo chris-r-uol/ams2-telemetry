@@ -74,9 +74,15 @@ function writeAtomic(file: string, data: string | Uint8Array): void {
   }
 }
 
+export interface Preferences {
+  /** The car you last picked, assumed for new sessions where the game doesn't name it. */
+  lastCar?: string;
+}
+
 export class SessionStore {
   readonly root: string;
   private readonly sessions = new Map<string, SessionMeta>();
+  private prefs: Preferences | null = null;
 
   constructor(root: string) {
     this.root = root;
@@ -100,6 +106,28 @@ export class SessionStore {
         console.warn(`Skipping unreadable session ${entry.name}:`, (error as Error).message);
       }
     }
+  }
+
+  private get preferencesFile(): string {
+    return join(this.root, 'preferences.json');
+  }
+
+  get preferences(): Preferences {
+    if (!this.prefs) {
+      try {
+        this.prefs = existsSync(this.preferencesFile)
+          ? (JSON.parse(readFileSync(this.preferencesFile, 'utf8')) as Preferences)
+          : {};
+      } catch {
+        this.prefs = {};
+      }
+    }
+    return this.prefs;
+  }
+
+  savePreferences(changes: Preferences): void {
+    this.prefs = { ...this.preferences, ...changes };
+    writeAtomic(this.preferencesFile, JSON.stringify(this.prefs, null, 2));
   }
 
   list(): SessionMeta[] {

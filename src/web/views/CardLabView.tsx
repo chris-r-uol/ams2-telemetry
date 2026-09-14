@@ -52,7 +52,7 @@ const CARDS: LabCard[] = [
     letter: 'D',
     name: 'Balance now',
     Component: BalanceMeterCard,
-    what: 'Whether the car is understeering or oversteering right now, against how it behaves in gentle corners.',
+    what: 'Whether the car is understeering or oversteering right now, against the steering it usually needs for the same corner and cornering force.',
     updates: 'Continuously while cornering',
     kind: 'insight',
     suggested: 'Optimisation and full',

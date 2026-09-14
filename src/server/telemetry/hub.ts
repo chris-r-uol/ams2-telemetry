@@ -76,6 +76,8 @@ export interface SessionContext {
   track: TrackInfo | null;
   car: string;
   carClass: string;
+  /** Every car the game has named. AMS2 doesn't say which one is the player's. */
+  vehicles: string[];
   driver: string;
   gameState: GameState;
   sessionState: SessionState;
@@ -158,6 +160,7 @@ export class TelemetryHub {
     track: null,
     car: '',
     carClass: '',
+    vehicles: [],
     driver: '',
     gameState: 'playing',
     sessionState: 'invalid',
@@ -251,10 +254,14 @@ export class TelemetryHub {
         for (const c of packet.data.classes) if (c.name) this.classes.set(c.classIndex, c.name);
         this.refreshNames();
         break;
-      case 'timings':
+      case 'timings': {
+        const carIndex = packet.data.participants[this.viewedIndex]?.carIndex;
+        const carChanged = carIndex !== this.timings?.participants[this.viewedIndex]?.carIndex;
         this.timings = packet.data;
         ctx.numParticipants = Math.max(0, packet.data.numParticipants);
+        if (carChanged) this.refreshNames();
         break;
+      }
       case 'timeStats': {
         const stats = packet.data.participants[this.viewedIndex];
         if (stats && stats.lastLapTime > 0 && Math.abs(stats.lastLapTime - this.lastOfficialLapTime) > 1e-4) {
@@ -279,10 +286,14 @@ export class TelemetryHub {
   }
 
   private refreshNames(): void {
-    const vehicle = this.vehicles.get(this.viewedIndex);
+    // Vehicles are keyed by the index in each participant's timing entry. AMS2 fills it in
+    // for AI cars but not for the player, so the player's car usually stays unknown.
+    const carIndex = this.timings?.participants[this.viewedIndex]?.carIndex;
+    const vehicle = carIndex === undefined ? undefined : this.vehicles.get(carIndex);
     this.context.driver = this.names.get(this.viewedIndex) ?? '';
     this.context.car = vehicle?.name ?? '';
     this.context.carClass = vehicle ? (this.classes.get(vehicle.classIndex) ?? '') : '';
+    this.context.vehicles = [...new Set([...this.vehicles.values()].map((v) => v.name))].sort();
   }
 
   private count(kind: string): void {

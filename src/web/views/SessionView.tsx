@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { formatLapTime, formatSectorTime, SESSION_LABELS, speedIn, speedLabel, temperatureIn, temperatureLabel } from '../../shared/format.ts';
 import type { LapSummary, SessionMeta } from '../../shared/model/types.ts';
+import { CarPicker } from '../components/CarPicker.tsx';
 import { bestLap, bestSectors, formatSessionDate, isCoachable, LapStatus, sessionTitle } from '../components/laps.tsx';
 import { Card, DeltaValue, EmptyState, Stat } from '../components/ui.tsx';
 import { api, sendJson, useApi, type InsightsDto } from '../lib/api.ts';
@@ -72,7 +73,7 @@ export function SessionView({ id }: { id: string }) {
             {isLive && <span className="badge badge-good">Live</span>}
           </p>
           <h1>{sessionTitle(s)}</h1>
-          <p className="secondary">{[s.car, s.carClass].filter(Boolean).join(' · ') || 'Unknown car'}</p>
+          <CarPicker session={s} onChange={session.reload} />
         </div>
         <div className="page-actions">
           <a className="btn is-primary" href={href({ name: 'coach', id })}>

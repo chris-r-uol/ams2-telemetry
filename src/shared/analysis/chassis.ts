@@ -26,15 +26,24 @@ export const CHASSIS = {
   minSpeed: 10,
   /** Ride height at or below this counts as bottoming, m. */
   bottoming: 0.003,
+  /** A vertical jolt this big at the same moment makes bottoming a kerb or bump strike, g. */
+  strikeG: 1,
   lockUpSlip: -0.15,
   wheelspinSlip: 0.12,
   /** Split between low- and high-speed damper movement, m/s. */
   damperKnee: 0.025,
   damperRange: 0.25,
   damperBin: 0.01,
-  /** ±12% more/less steering than the car needs in gentle corners. */
+  /** ±12% more/less steering than this car usually needs for the same corner and cornering force. */
   balance: 0.12,
+  /** Body slip beyond this is a spin rather than driving, degrees. */
+  spinSlipAngle: 25,
+  /** Seconds left out before and after a spin, impact or trip off the track. */
+  incidentBefore: 1,
+  incidentAfter: 3,
 } as const;
+
+const G = 9.80665;
 
 export interface ChassisLap {
   summary: LapSummary;
@@ -61,11 +70,21 @@ export interface ChassisCalibration {
   damperSign: 1 | -1;
   /** True if the game's "x" velocity turned out to be the longitudinal one. */
   velocityAxesSwapped: boolean;
-  /** Steering fraction the car needs per 1/m of path curvature in gentle corners. */
+  /** Steering fraction a neutral car needs per 1/m of path curvature: the geometric part. */
   steerPerCurvature: number | null;
+  /** Extra steering fraction per g of cornering, as the tyres run at bigger slip angles: the understeer gradient. */
+  steerPerG: number | null;
   steeringFit: number | null;
+  /** AMS2 sends radians per second despite the "RPS" name. Detected from the rolling radius each would imply. */
+  wheelSpeedUnit: 'rad/s' | 'rev/s';
   /** Rolling radius per wheel, m. */
   wheelRadius: Quad<number | null>;
+  /** Horizontal acceleration beyond this is contact rather than cornering or braking, g. */
+  impactG: number;
+  /** Left-to-right wheel spacing, from how the wheels' speeds differ in corners, m (signed like yaw rate). */
+  trackWidth: number | null;
+  /** How sideways the car usually gets at the limit: 95th percentile body slip while cornering, degrees. */
+  slideSlipAngle: number | null;
 }
 
 export type ChassisEventKind = 'lock-up' | 'wheelspin' | 'oversteer' | 'bottoming' | 'bump-stop' | 'wheel-lift';
@@ -81,6 +100,16 @@ export interface ChassisEvent {
   peak: number;
   braking: boolean;
   speed: number;
+  /** Bottoming with a sharp vertical jolt at the same moment: a kerb or bump strike, not the platform settling. */
+  strike: boolean;
+}
+
+/** A spin, contact or trip off the track. Left out of calibration and setup patterns. */
+export interface Incident {
+  lap: number;
+  distance: number;
+  corner: string | null;
+  duration: number;
 }
 
 export interface DamperHistogram {
@@ -165,6 +194,8 @@ export interface ChassisAnalysis {
   wheels: Quad<WheelSummary>;
   corners: CornerBalance[];
   events: ChassisEvent[];
+  /** Spins, contact and trips off the track that were left out of everything else. */
+  incidents: Incident[];
   platform: PlatformSummary;
   hints: SetupHint[];
 }
@@ -204,6 +235,8 @@ interface DerivedLap {
   damper: Quad<number[]>;
   ride: Quad<number[]>;
   grounded: Quad<boolean[]> | null;
+  /** Inside a spin, contact or trip off the track, with a margin either side. */
+  incident: boolean[];
 }
 
 // ---------------------------------------------------------------- helpers
@@ -328,6 +361,113 @@ function listNames(names: string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
+/** Angle between where the car points and where it's going, degrees. */
+export function bodySlipAngle(vLat: number, vLon: number, velocityAxesSwapped: boolean): number {
+  const sideways = velocityAxesSwapped ? vLon : vLat;
+  const forwards = velocityAxesSwapped ? vLat : vLon;
+  return (Math.abs(Math.atan2(sideways, Math.abs(forwards))) * 180) / Math.PI;
+}
+
+/**
+ * Spins, contact and trips off the track, with a margin either side. They say
+ * nothing about the setup, so they're left out of calibration and patterns.
+ * Contact shows up as horizontal acceleration the car can't corner or brake with.
+ */
+function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): boolean[] {
+  const n = tr.t.length;
+  const vLat = channel(tr, 'vLat');
+  const vLon = channel(tr, 'vLon');
+  const off = channel(tr, 'off');
+  const trigger = new Array<boolean>(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(tr.latG[i]) > impactG || Math.abs(tr.lonG[i]) > impactG || (off?.[i] ?? 0) >= 2) {
+      trigger[i] = true;
+    } else if (vLat && vLon && tr.speed[i] >= 5) {
+      trigger[i] = bodySlipAngle(vLat[i], vLon[i], velocityAxesSwapped) > CHASSIS.spinSlipAngle;
+    }
+  }
+  const mask = new Array<boolean>(n).fill(false);
+  let until = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (trigger[i]) until = tr.t[i] + CHASSIS.incidentAfter;
+    mask[i] = tr.t[i] <= until;
+  }
+  let from = Infinity;
+  for (let i = n - 1; i >= 0; i--) {
+    if (trigger[i]) from = tr.t[i] - CHASSIS.incidentBefore;
+    if (tr.t[i] >= from) mask[i] = true;
+  }
+  return mask;
+}
+
+/**
+ * Steering a neutral car needs, as a × curvature + b × lateral g: the geometric part plus
+ * the understeer gradient. Least squares through the origin, refitted without samples more
+ * than three robust standard deviations off the line, so a few corners can't bend it.
+ */
+function fitSteering(
+  kappa: number[],
+  lateral: number[],
+  steer: number[],
+): { perCurvature: number; perG: number; r2: number } | null {
+  const n = kappa.length;
+  if (n < 150) return null;
+  let keep = new Array<boolean>(n).fill(true);
+  let a = 0;
+  let b = 0;
+  for (let pass = 0; pass < 4; pass++) {
+    let skk = 0;
+    let skg = 0;
+    let sgg = 0;
+    let sks = 0;
+    let sgs = 0;
+    for (let i = 0; i < n; i++) {
+      if (!keep[i]) continue;
+      skk += kappa[i] ** 2;
+      skg += kappa[i] * lateral[i];
+      sgg += lateral[i] ** 2;
+      sks += kappa[i] * steer[i];
+      sgs += lateral[i] * steer[i];
+    }
+    if (skk <= 0) return null;
+    const det = skk * sgg - skg * skg;
+    if (det > 0.02 * skk * sgg) {
+      a = (sks * sgg - sgs * skg) / det;
+      b = (sgs * skk - sks * skg) / det;
+    } else {
+      // Every corner at a similar speed: the two parts can't be told apart, so use curvature alone.
+      a = sks / skk;
+      b = 0;
+    }
+    const residuals: number[] = [];
+    for (let i = 0; i < n; i++) if (keep[i]) residuals.push(Math.abs(steer[i] - a * kappa[i] - b * lateral[i]));
+    const sigma = Math.max(1e-4, 1.4826 * (median(residuals) ?? 0));
+    keep = kappa.map((k, i) => Math.abs(steer[i] - a * k - b * lateral[i]) <= 3 * sigma);
+  }
+  let count = 0;
+  let mean = 0;
+  for (let i = 0; i < n; i++) if (keep[i]) (mean += steer[i], count++);
+  if (count < 150 || a === 0) return null;
+  mean /= count;
+  let res = 0;
+  let tot = 0;
+  for (let i = 0; i < n; i++) {
+    if (!keep[i]) continue;
+    res += (steer[i] - a * kappa[i] - b * lateral[i]) ** 2;
+    tot += (steer[i] - mean) ** 2;
+  }
+  return { perCurvature: a, perG: b, r2: tot > 0 ? 1 - res / tot : 0 };
+}
+
+/** Steering a neutral car would need at this yaw rate and speed. NaN when it can't be judged. */
+export function neutralSteering(cal: ChassisCalibration, yawRate: number, speed: number): number {
+  if (cal.steerPerCurvature === null || !(speed >= 12)) return NaN;
+  const geometric = cal.steerPerCurvature * (yawRate / speed);
+  const needed = geometric + (cal.steerPerG ?? 0) * ((yawRate * speed) / G);
+  // A gradient that would flip the steering direction is beyond anything the fit saw.
+  return needed * geometric > 0 ? needed : NaN;
+}
+
 // ---------------------------------------------------------------- calibration
 
 /** Work out units, signs, steering ratio and wheel radii from the session's own data. */
@@ -424,77 +564,116 @@ export function calibrate(laps: ChassisLap[]): { availability: ChannelAvailabili
   }
   const velocityAxesSwapped = correlation(lat, speedSample) > correlation(lon, speedSample) + 0.1;
 
-  // Steering needed per unit of path curvature, fitted in gentle, steady corners.
+  // Contact shows up as acceleration far beyond what this car corners or brakes with.
+  const horizontal: number[] = [];
+  for (const trace of traces) {
+    for (let i = 0; i < trace.t.length; i += 3) {
+      if (trace.speed[i] >= CHASSIS.minSpeed) horizontal.push(Math.max(Math.abs(trace.latG[i]), Math.abs(trace.lonG[i])));
+    }
+  }
+  const usualLimit = horizontal.length > 100 ? percentile(Float64Array.from(horizontal).sort(), 0.99) : 0;
+  const impactG = Math.max(5, 2 * usualLimit);
+  const incidents = traces.map((trace) => incidentMask(trace, impactG, velocityAxesSwapped));
+
+  // Steering a neutral car needs, from steady cornering: off the brakes and without hard acceleration.
   let steerPerCurvature: number | null = null;
+  let steerPerG: number | null = null;
   let steeringFit: number | null = null;
   if (availability.yawRate) {
     const kappa: number[] = [];
+    const lateral: number[] = [];
     const steer: number[] = [];
-    for (const trace of traces) {
+    traces.forEach((trace, t) => {
       const yaw = channel(trace, 'yawRate');
-      if (!yaw) continue;
+      if (!yaw) return;
       for (let i = 0; i < trace.t.length; i += 2) {
         const v = trace.speed[i];
-        const g = Math.abs(trace.latG[i]);
-        if (v < 12 || Math.abs(yaw[i]) < 0.05 || g < 0.1 || g > 0.6 || trace.brake[i] > 0.05) continue;
+        if (v < 12 || Math.abs(yaw[i]) < 0.05 || trace.brake[i] > 0.05 || Math.abs(trace.lonG[i]) > 0.3) continue;
+        if (incidents[t][i]) continue;
         kappa.push(yaw[i] / v);
+        lateral.push((yaw[i] * v) / G);
         steer.push(trace.steering[i]);
       }
-    }
-    const fit = (keep: (i: number) => boolean) => {
-      let sxy = 0;
-      let sxx = 0;
-      for (let i = 0; i < kappa.length; i++) {
-        if (!keep(i)) continue;
-        sxy += kappa[i] * steer[i];
-        sxx += kappa[i] ** 2;
-      }
-      return sxx > 0 ? sxy / sxx : 0;
-    };
-    if (kappa.length >= 150) {
-      const first = fit(() => true);
-      let ss = 0;
-      for (let i = 0; i < kappa.length; i++) ss += (steer[i] - first * kappa[i]) ** 2;
-      const sigma = Math.sqrt(ss / kappa.length);
-      const inlier = (i: number) => Math.abs(steer[i] - first * kappa[i]) <= 3 * sigma;
-      const k = fit(inlier);
-      let res = 0;
-      let tot = 0;
-      let count = 0;
-      let mean = 0;
-      for (let i = 0; i < kappa.length; i++) if (inlier(i)) (mean += steer[i], count++);
-      mean /= Math.max(1, count);
-      for (let i = 0; i < kappa.length; i++) {
-        if (!inlier(i)) continue;
-        res += (steer[i] - k * kappa[i]) ** 2;
-        tot += (steer[i] - mean) ** 2;
-      }
-      const r2 = tot > 0 ? 1 - res / tot : 0;
-      if (count >= 150 && r2 >= 0.4 && k !== 0) {
-        steerPerCurvature = k;
-        steeringFit = r2;
-      }
+    });
+    const fit = fitSteering(kappa, lateral, steer);
+    if (fit && fit.r2 >= 0.4) {
+      steerPerCurvature = fit.perCurvature;
+      steerPerG = fit.perG;
+      steeringFit = fit.r2;
     }
   }
 
-  // Rolling radius per wheel, from gentle straight-line running.
-  const wheelRadius = quad<number | null>((w) => {
-    if (!availability.wheelSpeed) return null;
-    const radii: number[] = [];
-    for (const trace of traces) {
-      const rps = channel(trace, WHEEL_SPEED[w]);
-      if (!rps) continue;
-      for (let i = 0; i < trace.t.length; i += 3) {
-        const spin = Math.abs(rps[i]);
-        // Straights at speed: full throttle is fine there, because tyres barely slip once the car is quick.
-        if (trace.speed[i] < 25 || spin < 1 || trace.brake[i] > 0.02) continue;
-        if (Math.abs(trace.latG[i]) > 0.3 || Math.abs(trace.lonG[i]) > 0.3) continue;
-        radii.push(trace.speed[i] / (2 * Math.PI * spin));
+  // Rolling radius per wheel, from straight-line running at speed. Full throttle is fine
+  // there, because tyres barely slip once the car is quick.
+  const ratios = quad<number[]>(() => []);
+  if (availability.wheelSpeed) {
+    traces.forEach((trace, t) => {
+      for (let w = 0; w < 4; w++) {
+        const spin = channel(trace, WHEEL_SPEED[w]);
+        if (!spin) continue;
+        for (let i = 0; i < trace.t.length; i += 3) {
+          const rate = Math.abs(spin[i]);
+          if (trace.speed[i] < 25 || rate < 1 || trace.brake[i] > 0.02 || incidents[t][i]) continue;
+          if (Math.abs(trace.latG[i]) > 0.3 || Math.abs(trace.lonG[i]) > 0.3) continue;
+          ratios[w].push(trace.speed[i] / rate);
+        }
       }
-    }
-    const r = radii.length >= 50 ? median(radii) : null;
-    return r !== null && r > 0.15 && r < 0.6 ? r : null;
+    });
+  }
+  // Speed ÷ wheel speed is the radius if the game sends radians per second, or 2π × the
+  // radius if it sends revolutions. Tyres are 15–60 cm, so only one reading fits.
+  const plausibleRadius = (r: number | null) => r !== null && r > 0.15 && r < 0.6;
+  const typicalRatio = median(ratios.flat());
+  const wheelSpeedUnit: 'rad/s' | 'rev/s' =
+    typicalRatio !== null && !plausibleRadius(typicalRatio) && plausibleRadius(typicalRatio / (2 * Math.PI))
+      ? 'rev/s'
+      : 'rad/s';
+  const wheelRadius = quad<number | null>((w) => {
+    const ratio = ratios[w].length >= 50 ? median(ratios[w]) : null;
+    const radius = ratio === null ? null : wheelSpeedUnit === 'rev/s' ? ratio / (2 * Math.PI) : ratio;
+    return plausibleRadius(radius) ? radius : null;
   });
+
+  // In a corner the outside wheels travel further than the middle of the car. Rolling freely
+  // (off the brakes, light throttle), that shows as a speed difference of yaw rate × track width.
+  const measureTrack = (left: number, right: number): number | null => {
+    const rl = wheelRadius[left];
+    const rr = wheelRadius[right];
+    if (!availability.yawRate || rl === null || rr === null) return null;
+    const perUnit = wheelSpeedUnit === 'rev/s' ? 2 * Math.PI : 1;
+    const widths: number[] = [];
+    traces.forEach((trace, t) => {
+      const wl = channel(trace, WHEEL_SPEED[left]);
+      const wr = channel(trace, WHEEL_SPEED[right]);
+      const yaw = channel(trace, 'yawRate');
+      if (!wl || !wr || !yaw) return;
+      for (let i = 0; i < trace.t.length; i += 2) {
+        if (trace.speed[i] < 15 || Math.abs(yaw[i]) < 0.2 || trace.brake[i] > 0.02 || trace.throttle[i] > 0.3) continue;
+        if (Math.abs(trace.lonG[i]) > 0.15 || incidents[t][i]) continue;
+        widths.push(((Math.abs(wr[i]) * rr - Math.abs(wl[i]) * rl) * perUnit) / yaw[i]);
+      }
+    });
+    const width = widths.length >= 100 ? median(widths) : null;
+    return width !== null && Math.abs(width) > 1 && Math.abs(width) < 2.2 ? width : null;
+  };
+  // Front wheels first: on most cars they aren't driven, so they roll most freely.
+  const trackWidth = measureTrack(0, 1) ?? measureTrack(2, 3);
+
+  // How sideways the car usually gets at the limit, to tell a slide from a quick change of direction.
+  const slips: number[] = [];
+  if (availability.slipAngle && availability.yawRate) {
+    traces.forEach((trace, t) => {
+      const vLat = channel(trace, 'vLat');
+      const vLon = channel(trace, 'vLon');
+      const yaw = channel(trace, 'yawRate');
+      if (!vLat || !vLon || !yaw) return;
+      for (let i = 0; i < trace.t.length; i += 2) {
+        if (trace.speed[i] < 12 || Math.abs(yaw[i]) < 0.1 || incidents[t][i]) continue;
+        slips.push(bodySlipAngle(vLat[i], vLon[i], velocityAxesSwapped));
+      }
+    });
+  }
+  const slideSlipAngle = slips.length >= 200 ? percentile(Float64Array.from(slips).sort(), 0.95) : null;
 
   return {
     availability,
@@ -505,8 +684,13 @@ export function calibrate(laps: ChassisLap[]): { availability: ChannelAvailabili
       damperSign,
       velocityAxesSwapped,
       steerPerCurvature,
+      steerPerG,
       steeringFit,
+      wheelSpeedUnit,
       wheelRadius,
+      impactG,
+      trackWidth,
+      slideSlipAngle,
     },
   };
 }
@@ -528,28 +712,32 @@ function deriveLap(lap: ChassisLap, availability: ChannelAvailability, cal: Chas
   for (let i = 0; i < n; i++) {
     const v = tr.speed[i];
     if (v < 12) continue;
-    if (cal.steerPerCurvature !== null && yaw) {
-      const required = cal.steerPerCurvature * (yaw[i] / v);
-      if (Math.abs(required) >= 0.01) {
+    if (availability.slipAngle && vLat && vLon) slipAngle[i] = bodySlipAngle(vLat[i], vLon[i], cal.velocityAxesSwapped);
+    if (yaw) {
+      const required = neutralSteering(cal, yaw[i], v);
+      // Steering already the other way while the car isn't sliding: it's changing direction faster
+      // than it can rotate, which says nothing about balance.
+      const changingDirection =
+        tr.steering[i] * required < 0 && cal.slideSlipAngle !== null && slipAngle[i] < cal.slideSlipAngle;
+      if (Math.abs(required) >= 0.01 && !changingDirection) {
         need[i] = required;
         balance[i] = (tr.steering[i] - required) * Math.sign(required);
       }
     }
-    if (availability.slipAngle && vLat && vLon) {
-      const sideways = cal.velocityAxesSwapped ? vLon[i] : vLat[i];
-      const forwards = cal.velocityAxesSwapped ? vLat[i] : vLon[i];
-      slipAngle[i] = (Math.abs(Math.atan2(sideways, Math.abs(forwards))) * 180) / Math.PI;
-    }
   }
 
   const wheelSlip = quad((w) => {
-    const rps = channel(tr, WHEEL_SPEED[w]);
+    const spin = channel(tr, WHEEL_SPEED[w]);
     const radius = cal.wheelRadius[w];
     const out = nan();
-    if (!rps || radius === null) return out;
+    if (!spin || radius === null) return out;
+    const metresPerUnit = cal.wheelSpeedUnit === 'rev/s' ? 2 * Math.PI * radius : radius;
+    // Each wheel's own path: in a corner the outside wheels travel further than the middle of the car.
+    const offset = cal.trackWidth !== null ? (w % 2 === 0 ? -0.5 : 0.5) * cal.trackWidth : 0;
     for (let i = 0; i < n; i++) {
       const v = tr.speed[i];
-      if (v >= 8) out[i] = (2 * Math.PI * radius * Math.abs(rps[i]) - v) / v;
+      const ground = offset && yaw ? v + offset * yaw[i] : v;
+      if (v >= 8 && ground > 1) out[i] = (metresPerUnit * Math.abs(spin[i]) - ground) / ground;
     }
     return out;
   });
@@ -584,6 +772,7 @@ function deriveLap(lap: ChassisLap, availability: ChannelAvailability, cal: Chas
       availability.wheelContact && groundedMask
         ? quad((w) => groundedMask.map((mask) => ((mask >> w) & 1) === 1))
         : null,
+    incident: incidentMask(tr, cal.impactG, cal.velocityAxesSwapped),
   };
 }
 
@@ -592,11 +781,13 @@ function detectEvents(
   corners: Corner[],
   sampleRate: number,
   ceilings: Quad<number | null>,
+  slideSlipAngle: number | null,
 ): ChassisEvent[] {
   const events: ChassisEvent[] = [];
   const samples = (seconds: number) => Math.max(1, Math.round(seconds * sampleRate));
   const onTrack = (i: number) => dl.speed[i] >= CHASSIS.minSpeed;
-  const add = (kind: ChassisEventKind, [start, end]: [number, number], wheel: number | null, peak: number) => {
+  const add = (kind: ChassisEventKind, [start, end]: [number, number], wheel: number | null, peak: number, strike = false) => {
+    if (dl.incident[start] || dl.incident[end]) return;
     events.push({
       kind,
       lap: dl.lap.lap,
@@ -607,7 +798,19 @@ function detectEvents(
       peak,
       braking: dl.brake[start] > 0.3,
       speed: dl.speed[start],
+      strike,
     });
+  };
+  // A sharp vertical jolt near a run, measured from the lap's usual level so gravity conventions don't matter.
+  const vertical = dl.vertG;
+  const verticalBase = vertical ? (median(vertical.filter((v, i) => i % 5 === 0 && Number.isFinite(v))) ?? 0) : 0;
+  const jolt = ([start, end]: [number, number]) => {
+    if (!vertical) return false;
+    const reach = samples(0.1);
+    for (let i = Math.max(0, start - reach); i <= Math.min(dl.n - 1, end + reach); i++) {
+      if (Math.abs(vertical[i] - verticalBase) >= CHASSIS.strikeG) return true;
+    }
+    return false;
   };
   const extreme = (values: number[], [start, end]: [number, number], pick: (a: number, b: number) => number) => {
     let best = values[start];
@@ -625,7 +828,7 @@ function detectEvents(
     }
     const ride = dl.ride[w];
     for (const run of findRuns(dl.n, (i) => onTrack(i) && ride[i] <= CHASSIS.bottoming, 1)) {
-      add('bottoming', run, w, extreme(ride, run, Math.min));
+      add('bottoming', run, w, extreme(ride, run, Math.min), jolt(run));
     }
     const ceiling = ceilings[w];
     if (ceiling !== null) {
@@ -642,6 +845,12 @@ function detectEvents(
 
   const ratio = (i: number) => dl.balance[i] / Math.abs(dl.need[i]);
   for (const run of findRuns(dl.n, (i) => Math.abs(dl.need[i]) >= 0.02 && ratio(i) < -0.35, samples(0.15))) {
+    // Less steering than the car needs is only a slide if the car is also more sideways than usual.
+    if (slideSlipAngle !== null) {
+      let slip = 0;
+      for (let i = run[0]; i <= run[1]; i++) if (Number.isFinite(dl.slipAngle[i])) slip = Math.max(slip, dl.slipAngle[i]);
+      if (slip < slideSlipAngle) continue;
+    }
     let peak = 0;
     for (let i = run[0]; i <= run[1]; i++) if (Number.isFinite(ratio(i))) peak = Math.min(peak, ratio(i));
     add('oversteer', run, null, peak);
@@ -707,7 +916,7 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
   const damperValues = quad<number[]>(() => []);
   for (const dl of derived) {
     for (let i = 0; i < dl.n; i++) {
-      if (dl.speed[i] < CHASSIS.minSpeed) continue;
+      if (dl.speed[i] < CHASSIS.minSpeed || dl.incident[i]) continue;
       for (let w = 0; w < 4; w++) {
         if (Number.isFinite(dl.travel[w][i])) travelValues[w].push(dl.travel[w][i]);
         if (Number.isFinite(dl.ride[w][i])) rideValues[w].push(dl.ride[w][i]);
@@ -730,7 +939,20 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
     return near / sorted.length >= 0.002 ? max - band : null;
   });
 
-  const events = derived.flatMap((dl) => detectEvents(dl, corners, sampleRate, ceilings));
+  const events = derived.flatMap((dl) => detectEvents(dl, corners, sampleRate, ceilings, calibration.slideSlipAngle));
+  const lead = Math.round(CHASSIS.incidentBefore * sampleRate);
+  const incidents: Incident[] = derived.flatMap((dl) =>
+    findRuns(dl.n, (i) => dl.incident[i], 1).map(([start, end]) => {
+      // The window opens a moment before the spin or impact itself: report where it happened.
+      const at = start === 0 ? start : Math.min(end, start + lead);
+      return {
+        lap: dl.lap.lap,
+        distance: dl.d[at],
+        corner: cornerAt(corners, dl.d[at])?.name ?? null,
+        duration: dl.t[end] - dl.t[start],
+      };
+    }),
+  );
 
   const wheels = quad<WheelSummary>((w) => {
     const counts = EMPTY_COUNTS();
@@ -759,6 +981,7 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
     wheels,
     corners: cornerBalance,
     events,
+    incidents,
     platform,
     hints: [],
   };
@@ -818,13 +1041,16 @@ export function analyseRun(
     availability,
     calibration,
   );
-  const events = dl.n > 1 ? detectEvents(dl, [corner], calibration.sampleRate ?? 60, [null, null, null, null]) : [];
+  const events =
+    dl.n > 1
+      ? detectEvents(dl, [corner], calibration.sampleRate ?? 60, [null, null, null, null], calibration.slideSlipAngle)
+      : [];
   const buckets = [0, 1, 2].map(() => ({ extra: 0, need: 0, samples: 0 }));
   const balance = new Array<number>(dl.n).fill(NaN);
   let slip = 0;
   for (let i = 0; i < dl.n; i++) {
     if (Number.isFinite(dl.slipAngle[i])) slip = Math.max(slip, dl.slipAngle[i]);
-    if (!Number.isFinite(dl.balance[i])) continue;
+    if (!Number.isFinite(dl.balance[i]) || dl.incident[i]) continue;
     balance[i] = dl.balance[i] / Math.abs(dl.need[i]);
     const phase = phaseIndex(corner, dl.d[i]);
     if (phase < 0) continue;
@@ -850,6 +1076,7 @@ function balanceByCorner(derived: DerivedLap[], corners: Corner[], events: Chass
   for (const dl of source) {
     const lapPeak = corners.map(() => 0);
     for (let i = 0; i < dl.n; i++) {
+      if (dl.incident[i]) continue;
       const d = dl.d[i];
       const ci = corners.findIndex((c) => c.ranges.some(([from, to]) => d >= from && d < to));
       if (ci < 0) continue;
@@ -897,7 +1124,7 @@ function platformSummary(derived: DerivedLap[]): PlatformSummary {
   for (const dl of derived) {
     for (let i = 0; i < dl.n; i++) {
       const v = dl.speed[i];
-      if (v < CHASSIS.minSpeed) continue;
+      if (v < CHASSIS.minSpeed || dl.incident[i]) continue;
       speeds.push(v);
       const [fl, fr, rl, rr] = dl.travel.map((t) => t[i]);
       const lat = Math.abs(dl.latG[i]);
@@ -979,12 +1206,17 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
   ];
   const axleEvents = (kind: ChassisEventKind, wheels: Wheel[]) =>
     a.events.filter((e) => e.kind === kind && e.wheel !== null && wheels.includes(e.wheel));
+  // A pattern has to show up on several laps: one spin or one wild kerb isn't the setup.
+  const minLaps = Math.max(2, Math.ceil(a.lapsAnalysed * 0.25));
+  const lapCount = (events: ChassisEvent[]) => new Set(events.map((e) => e.lap)).size;
+  const repeats = (events: ChassisEvent[]) => events.length >= 3 && lapCount(events) >= minLaps;
 
   for (const axle of axles) {
     const bottoming = axleEvents('bottoming', axle.wheels);
-    if (bottoming.length >= 3) {
-      const lowest = Math.min(...bottoming.map((e) => e.peak));
-      const context = where(bottoming, a.platform.topSpeed);
+    const settling = bottoming.filter((e) => !e.strike);
+    if (repeats(settling)) {
+      const lowest = Math.min(...settling.map((e) => e.peak));
+      const context = where(settling, a.platform.topSpeed);
       const braking = context.startsWith('under braking');
       const fast = context.startsWith('at high speed');
       hints.push({
@@ -992,7 +1224,7 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
         area: 'suspension',
         importance: 'high',
         title: `The ${axle.name} is bottoming out`,
-        evidence: `${axle.label[0].toUpperCase()}${axle.label.slice(1)} ride height dropped to ${mm(lowest)} ${bottoming.length} times across ${laps}, mostly ${context}.`,
+        evidence: `${axle.label[0].toUpperCase()}${axle.label.slice(1)} ride height dropped to ${mm(lowest)} on ${lapCount(settling)} of ${laps}, mostly ${context}.`,
         tryThis: braking
           ? [
               `Raise the ${axle.name} ride height a step.`,
@@ -1013,8 +1245,24 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
       });
     }
 
+    const strikes = bottoming.filter((e) => e.strike);
+    if (repeats(strikes)) {
+      hints.push({
+        id: `kerb-strikes-${axle.key}`,
+        area: 'suspension',
+        importance: 'low',
+        title: `Kerbs or bumps are knocking the ${axle.name} onto the ground`,
+        evidence: `The ${axle.name} touched down with a sharp jolt on ${lapCount(strikes)} of ${laps}, mostly ${where(strikes, a.platform.topSpeed)}. That's a strike, not the car running too low.`,
+        tryThis: [
+          `Soften ${axle.name} fast bump damping so the car rides over kerbs.`,
+          `Raise the ${axle.name} ride height a little if you want to keep using those kerbs.`,
+          'Or take less kerb there.',
+        ],
+      });
+    }
+
     const stops = axleEvents('bump-stop', axle.wheels);
-    if (stops.length >= 3 && a.wheels.some((w) => axle.wheels.includes(w.wheel) && w.bumpStopSuspected)) {
+    if (repeats(stops) && a.wheels.some((w) => axle.wheels.includes(w.wheel) && w.bumpStopSuspected)) {
       hints.push({
         id: `bump-stop-${axle.key}`,
         area: 'suspension',
@@ -1030,7 +1278,7 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
     }
 
     const lifts = axleEvents('wheel-lift', axle.wheels);
-    if (lifts.length >= 3) {
+    if (repeats(lifts)) {
       hints.push({
         id: `wheel-lift-${axle.key}`,
         area: 'suspension',
@@ -1046,7 +1294,7 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
     }
 
     const locks = axleEvents('lock-up', axle.wheels);
-    if (locks.length >= 3) {
+    if (repeats(locks)) {
       hints.push({
         id: `lock-up-${axle.key}`,
         area: 'braking',
@@ -1069,7 +1317,7 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
     }
 
     const spins = axleEvents('wheelspin', axle.wheels);
-    if (spins.length >= 3) {
+    if (repeats(spins)) {
       hints.push({
         id: `wheelspin-${axle.key}`,
         area: 'traction',
@@ -1142,14 +1390,14 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
         area: 'balance',
         importance: 'medium',
         title: `${phase.label} ${verdict}`,
-        evidence: `In ${matching.length} of ${judged.length} corners (${listNames(matching.slice(0, 5).map((c) => c.corner))}) you used about ${Math.round(typical * 100)}% ${verdict === 'understeer' ? 'more' : 'less'} steering than the car needs in gentle corners.`,
+        evidence: `In ${matching.length} of ${judged.length} corners (${listNames(matching.slice(0, 5).map((c) => c.corner))}) you used about ${Math.round(typical * 100)}% ${verdict === 'understeer' ? 'more' : 'less'} steering than this car usually needs for the same corner and cornering force.`,
         tryThis: advice[phase.key][verdict],
       });
     }
   }
 
   const slides = a.events.filter((e) => e.kind === 'oversteer');
-  if (slides.length >= 3) {
+  if (repeats(slides)) {
     const onThrottle = slides.filter((e) => !e.braking).length >= slides.length / 2;
     hints.push({
       id: 'oversteer-moments',

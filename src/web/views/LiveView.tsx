@@ -166,6 +166,12 @@ function SessionStrip({
           {[session?.track.variation, session?.car, session ? SESSION_LABELS[session.sessionType] : null]
             .filter(Boolean)
             .join(' · ')}
+          {session && (!session.car || session.carSource === 'remembered') && (
+            <>
+              {session.car ? ' (assumed) · ' : ' · '}
+              <a href={href({ name: 'session', id: session.id })}>{session.car ? 'Change car' : 'Set your car'}</a>
+            </>
+          )}
         </p>
       </div>
       <dl className="strip-facts">

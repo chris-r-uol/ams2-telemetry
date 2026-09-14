@@ -77,7 +77,8 @@ function pushSample(tr: LapTrace, t: number, d: number, tick: Tick): void {
 }
 
 const LEAVING_PITS = new Set(['inPit', 'drivingOutOfPits', 'inGarage', 'drivingOutOfGarage']);
-const ENTERING_PITS = new Set(['drivingIntoPits', 'inPit']);
+// Returning to the garage mid-lap ends the lap in the pits too.
+const ENTERING_PITS = new Set(['drivingIntoPits', 'inPit', 'inGarage']);
 const OFFICIAL_TIME_TOLERANCE = 0.75;
 
 export class LapBuilder {

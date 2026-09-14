@@ -30,11 +30,16 @@ found in your session, and the units and directions that were detected.
 ## Understeer and oversteer
 
 The line the car is actually following has a curvature of **yaw rate ÷ speed**. A
-car that's neither understeering nor oversteering needs an amount of steering
-proportional to that curvature. The exact proportion depends on the steering ratio
-and wheelbase, which aren't in the telemetry, so it's learned from your own laps:
-from gentle, steady cornering (0.1–0.6 g, off the brakes) where the tyres are well
-within their grip.
+car that's neither understeering nor oversteering needs steering in two parts:
+
+- a **geometric** part, proportional to that curvature and set by the steering ratio and wheelbase
+- a part that grows with **cornering force** (speed × yaw rate), because the tyres run at
+  bigger slip angles as they work harder. This is the car's understeer gradient.
+
+Neither is in the telemetry, so both are learned from your own laps, by fitting that
+two-part line through steady cornering (off the brakes, without hard acceleration).
+Spins, contact and trips off the track are left out. The fit is then repeated without
+samples far from the line, so a handful of corners or one wild moment can't bend it.
 
 At every moment:
 
@@ -46,13 +51,20 @@ Each corner is split into **entry** (up to 15 m before the slowest point),
 **mid-corner** (±15 m) and **exit**. A phase is called understeer or oversteer when you
 used more than 12% more, or 12% less, steering than needed.
 
-Because it's calibrated against the car's own gentle-cornering behaviour, the
-measure works for any car. It tells you how the balance changes as you approach the
-limit, which is exactly what setup changes affect. It can't compare the car with a
-theoretical "perfectly neutral" car.
+Because it's calibrated against this car's own behaviour at the same cornering force,
+the measure works for any car and doesn't mistake normal tyre slip at the limit for
+understeer. It shows where the balance departs from how the car usually behaves: entry
+against mid-corner, slow corners against fast ones, one setup against another. It can't
+compare the car with a theoretical "perfectly neutral" car.
+
+Moments where the steering already points the other way but the car isn't sliding are
+left out. The car is changing direction faster than it can rotate, which says nothing
+about balance. Without this, every chicane exit read as oversteer.
 
 **Oversteer moments** are stretches of at least 0.15 s where steering fell more than
-35% below what the car needed, which includes catching a slide with opposite lock.
+35% below what the car needed **and** the car was more sideways than it usually gets at
+the limit (its 95th-percentile slip angle while cornering, measured per session). That
+includes catching a slide with opposite lock, but not unwinding the wheel out of a corner.
 
 ## Sliding
 
@@ -63,7 +75,13 @@ the limit; the corner table shows the typical peak for each corner.
 ## Lock-ups and wheelspin
 
 Each wheel's **rolling radius** is measured on straights at speed, where tyres barely
-slip. After that, **slip = (wheel surface speed − car speed) ÷ car speed**:
+slip. AMS2 sends wheel speed in radians per second, despite calling it `sTyreRPS`. The
+unit is detected from the radius each reading would imply, since only one comes out
+tyre-sized. In a corner the outside wheels travel further than the middle of the car, so
+each wheel is compared with its own path. The track width that needs is measured from how
+the front wheels' speeds differ in gentle corners, and the correction is skipped if it
+doesn't come out car-sized. After that,
+**slip = (wheel surface speed − speed along the wheel's path) ÷ that speed**:
 
 - **lock-up**: below −15% while braking, for at least 50 ms
 - **wheelspin**: above +12% on the throttle, for at least 80 ms
@@ -72,7 +90,9 @@ slip. After that, **slip = (wheel surface speed − car speed) ÷ car speed**:
 
 - **Travel used** is the range each corner of the suspension covers, ignoring the most
   extreme 2% at each end.
-- **Bottoming** is ride height at or below 3 mm.
+- **Bottoming** is ride height at or below 3 mm. When the car also takes a sharp
+  vertical jolt (1 g or more) at the same moment, it counts as a **kerb or bump strike**
+  instead, which calls for different changes.
 - **Bump stops** are suspected when an unusual share of samples (at least 0.2%) sits within
   a hair of the same maximum compression. Springs and dampers alone rarely pile samples up
   at one ceiling; a bump stop does.
@@ -106,16 +126,31 @@ Lines are fitted through the middle 98% of samples, and anything above 5 g is ig
 strikes and contact don't skew the result. None of these have a "right" value; compare them
 between setups. Stiffer springs or anti-roll bars make the matching number smaller.
 
+## Spins, contact and trips off the track
+
+Being hit, spinning or running onto the grass says nothing about the setup, so those
+moments are left out of everything on the page: the steering and wheel calibration, the
+distributions, the events and the hints. A moment counts when:
+
+- horizontal acceleration goes beyond anything the car corners or brakes with (twice its
+  usual peak, and at least 5 g), which only contact produces
+- the car is more than 25° sideways
+- two or more wheels are off the track
+
+One second before and three seconds after each one are left out too. The **Data from the
+game** card says what was left out.
+
 ## Setup hints
 
-Hints appear when a pattern repeats. For example, bottoming three or more times at the
-same axle, or understeer in at least 40% of corners in the same phase. The suggestions
-follow common setup practice:
+Hints appear when a pattern repeats: an event at least three times and on at least a
+quarter of the laps (never from a single lap), or understeer in at least 40% of corners
+in the same phase. The suggestions follow common setup practice:
 
 | Pattern | Typical changes |
 |---|---|
 | Bottoming under braking | more ride height, stiffer front springs or slow bump, more packer range |
 | Bottoming at high speed | more ride height, stiffer springs, less wing at that end |
+| Kerb or bump strikes | softer fast bump, a little more ride height, less kerb |
 | Running out of travel | stiffer springs or more ride height (or leave it, if the car is fast) |
 | Wheel lifting | softer anti-roll bar or fast bump at that axle, less kerb |
 | Front lock-ups | brake bias rearward, less brake pressure |

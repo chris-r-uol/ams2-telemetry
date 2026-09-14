@@ -115,7 +115,7 @@ export class SessionManager {
       sessionState: ctx.sessionState,
       sessionId: this.session?.id ?? null,
       track: ctx.track,
-      car: ctx.car,
+      car: this.session?.car || ctx.car,
       lap: tick?.lap ?? 0,
       lapTime: tick?.lapTime ?? 0,
       lapDistance: this.builder.distance,
@@ -171,12 +171,35 @@ export class SessionManager {
     for (const listener of this.tickListeners) listener(tick);
   }
 
+  /**
+   * You told us the car. AMS2 doesn't name the player's car, so it's saved on the session and
+   * assumed for new sessions until you pick another.
+   */
+  chooseCar(sessionId: string, car: string): SessionMeta | null {
+    const live = this.session?.id === sessionId ? this.session : null;
+    const stored = live ?? this.store.get(sessionId);
+    if (!stored) return null;
+    const session = live ?? structuredClone(stored);
+    if (session.car !== car) session.carClass = '';
+    session.car = car;
+    session.carSource = 'chosen';
+    this.store.saveSession(session);
+    this.store.savePreferences({ lastCar: car });
+    if (live) {
+      // A best lap from another session was for the car we assumed. Look again for this one.
+      if (this.reference && this.reference.sessionId !== live.id) this.reference = this.sessionReference();
+      this.lookedForAllTimeBest = false;
+      this.emitSession();
+    }
+    return session;
+  }
+
   private isNewSession(ctx: SessionContext, tick: Tick): boolean {
     const s = this.session;
     if (!s || !ctx.track) return true;
     if (s.track.location !== ctx.track.location || s.track.variation !== ctx.track.variation) return true;
     if (ctx.sessionState !== 'invalid' && s.sessionType !== 'invalid' && ctx.sessionState !== s.sessionType) return true;
-    if (ctx.car && s.car && ctx.car !== s.car) return true;
+    if (ctx.car && s.car && s.carSource === 'game' && ctx.car !== s.car) return true;
     const last = this.lastTick;
     return last !== null && tick.lap < last.lap && tick.lap <= 1;
   }
@@ -184,6 +207,7 @@ export class SessionManager {
   private startSession(ctx: SessionContext): void {
     const now = Date.now();
     const track = ctx.track!;
+    const remembered = ctx.car ? '' : (this.store.preferences.lastCar ?? '');
     this.builder.reset();
     this.laps = [];
     this.metricsCache.clear();
@@ -197,8 +221,10 @@ export class SessionManager {
       updatedAt: now,
       source: this.source,
       track: { ...track },
-      car: ctx.car,
+      car: ctx.car || remembered,
       carClass: ctx.carClass,
+      carSource: ctx.car ? 'game' : remembered ? 'remembered' : undefined,
+      vehicles: ctx.vehicles.length ? [...ctx.vehicles] : undefined,
       driver: ctx.driver,
       sessionType: ctx.sessionState,
       laps: [],
@@ -208,8 +234,16 @@ export class SessionManager {
 
   private fillSessionDetails(session: SessionMeta, ctx: SessionContext): void {
     let changed = false;
-    if (!session.car && ctx.car) [session.car, changed] = [ctx.car, true];
-    if (!session.carClass && ctx.carClass) [session.carClass, changed] = [ctx.carClass, true];
+    if (ctx.car && session.car !== ctx.car && session.carSource !== 'chosen') {
+      session.car = ctx.car;
+      session.carClass = ctx.carClass;
+      session.carSource = 'game';
+      changed = true;
+    }
+    if (!session.carClass && ctx.carClass && session.carSource === 'game') [session.carClass, changed] = [ctx.carClass, true];
+    if (ctx.vehicles.length && ctx.vehicles.join('\n') !== (session.vehicles ?? []).join('\n')) {
+      [session.vehicles, changed] = [[...ctx.vehicles], true];
+    }
     if (!session.driver && ctx.driver) [session.driver, changed] = [ctx.driver, true];
     if (session.sessionType === 'invalid' && ctx.sessionState !== 'invalid') {
       [session.sessionType, changed] = [ctx.sessionState, true];
@@ -313,6 +347,19 @@ export class SessionManager {
   private setCorners(corners: Corner[]): void {
     this.corners = corners;
     this.metricsCache.clear();
+  }
+
+  /** Your best lap this session as a delta reference, if you've set one. */
+  private sessionReference(): Reference | null {
+    const best = this.sessionBest();
+    if (!best || !this.session) return null;
+    return {
+      source: 'session',
+      sessionId: this.session.id,
+      lap: best.summary.lap,
+      lapTime: best.summary.lapTime!,
+      resampled: best.resampled,
+    };
   }
 
   private sessionBest(): AnalysedLap | null {

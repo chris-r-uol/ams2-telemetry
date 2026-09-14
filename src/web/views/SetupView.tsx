@@ -8,6 +8,7 @@ import type {
   ChassisEvent,
   ChassisEventKind,
   ChassisLapSeries,
+  Incident,
   PhaseBalance,
   SetupHint,
   Wheel,
@@ -263,6 +264,12 @@ function SetupBody({
   );
 }
 
+function describeIncidents(incidents: Incident[]): string {
+  const places = incidents.slice(0, 3).map((i) => `lap ${i.lap}${i.corner ? ` at ${i.corner}` : ''}`);
+  if (incidents.length > 3) return `${places.join(', ')} and ${incidents.length - 3} more`;
+  return places.length > 1 ? `${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}` : places[0];
+}
+
 function DataCard({ analysis }: { analysis: ChassisAnalysis }) {
   const { availability: av, calibration: cal } = analysis;
   const items: { label: string; ok: boolean; missing: string }[] = [
@@ -273,7 +280,7 @@ function DataCard({ analysis }: { analysis: ChassisAnalysis }) {
     },
     { label: 'Sliding (slip angle)', ok: av.slipAngle, missing: 'body velocity not sent' },
     {
-      label: 'Wheel lock and wheelspin',
+      label: av.wheelSpeed ? `Wheel lock and wheelspin (wheel speed sent in ${cal.wheelSpeedUnit})` : 'Wheel lock and wheelspin',
       ok: av.wheelSpeed && cal.wheelRadius.some((r) => r !== null),
       missing: av.wheelSpeed ? 'needs some straight-line running to calibrate' : 'wheel speeds not sent',
     },
@@ -310,9 +317,16 @@ function DataCard({ analysis }: { analysis: ChassisAnalysis }) {
           </p>
         )}
         <p>
-          Understeer and oversteer are measured against how much steering this car needs in gentle corners, worked out
-          from your own laps. Units and directions are detected from the data too.
+          Understeer and oversteer are measured against the steering this car usually needs for the same corner and
+          cornering force, worked out from your own laps. Units and directions are detected from the data too.
         </p>
+        {analysis.incidents.length > 0 && (
+          <p>
+            Left out {analysis.incidents.length === 1 ? 'one moment' : `${analysis.incidents.length} moments`} with a
+            spin, contact or a trip off the track ({describeIncidents(analysis.incidents)}), so they don't count as
+            setup problems.
+          </p>
+        )}
       </div>
     </Card>
   );

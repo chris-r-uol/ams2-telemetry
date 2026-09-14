@@ -12,7 +12,7 @@ import { DemoSimulator } from '../src/server/demo/simulator.ts';
 import { SessionManager } from '../src/server/session-manager.ts';
 import { SessionStore } from '../src/server/storage.ts';
 import { TelemetryHub } from '../src/server/telemetry/hub.ts';
-import { analyseChassis, type ChassisEventKind } from '../src/shared/analysis/chassis.ts';
+import { analyseChassis, calibrate, type ChassisEvent, type ChassisEventKind } from '../src/shared/analysis/chassis.ts';
 
 describe('chassis analysis on the demo car', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ams2-coach-chassis-'));
@@ -56,7 +56,52 @@ describe('chassis analysis on the demo car', () => {
     expect(a.calibration.damperSign).toBe(1);
     expect(a.calibration.velocityAxesSwapped).toBe(false);
     expect(a.calibration.steerPerCurvature).not.toBeNull();
+    expect(a.calibration.steerPerG).not.toBeNull();
+    expect(a.calibration.wheelSpeedUnit).toBe('rad/s');
     for (const radius of a.calibration.wheelRadius) expect(radius!).toBeCloseTo(0.33, 2);
+  });
+
+  it('reads wheel speed sent as revolutions per second too', () => {
+    const laps = [3, 4, 5].map((n) => store.loadLap(sessionId, n)!);
+    const perRevolution = 1 / (2 * Math.PI);
+    const asRevolutions = laps.map((lap) => ({
+      summary: lap.summary,
+      trace: {
+        ...lap.trace,
+        wheelFL: lap.trace.wheelFL.map((v) => v * perRevolution),
+        wheelFR: lap.trace.wheelFR.map((v) => v * perRevolution),
+        wheelRL: lap.trace.wheelRL.map((v) => v * perRevolution),
+        wheelRR: lap.trace.wheelRR.map((v) => v * perRevolution),
+      },
+    }));
+    const { calibration } = calibrate(asRevolutions);
+    expect(calibration.wheelSpeedUnit).toBe('rev/s');
+    for (const radius of calibration.wheelRadius) expect(radius!).toBeCloseTo(0.33, 2);
+  });
+
+  it("doesn't mistake a wheel's shorter path through a corner for a lock-up", () => {
+    // The demo's wheels all turn at the car's speed. Real outside wheels travel further: give it a 1.5 m track.
+    const halfTrack = 0.75;
+    const withPaths = manager.session!.laps.map((summary) => {
+      const { trace } = store.loadLap(sessionId, summary.lap)!;
+      const path = (side: number) => (value: number, i: number) =>
+        trace.speed[i] > 1 ? (value * Math.max(0, trace.speed[i] + side * trace.yawRate[i] * halfTrack)) / trace.speed[i] : value;
+      return {
+        summary,
+        trace: {
+          ...trace,
+          wheelFL: trace.wheelFL.map(path(-1)),
+          wheelFR: trace.wheelFR.map(path(1)),
+          wheelRL: trace.wheelRL.map(path(-1)),
+          wheelRR: trace.wheelRR.map(path(1)),
+        },
+      };
+    });
+    const result = analyseChassis(withPaths, detected);
+    expect(result.calibration.trackWidth!).toBeCloseTo(1.5, 1);
+    const count = (events: ChassisEvent[], kind: ChassisEventKind) => events.filter((e) => e.kind === kind).length;
+    expect(count(result.events, 'lock-up')).toBe(count(a.events, 'lock-up'));
+    expect(count(result.events, 'wheelspin')).toBe(count(a.events, 'wheelspin'));
   });
 
   it('spots the front bottoming out and hitting the bump stops in the bumpy braking zone', () => {
@@ -114,5 +159,26 @@ describe('chassis analysis on the demo car', () => {
     const result = analyseChassis([{ summary: stored.summary, trace: legacy as typeof stored.trace }], []);
     expect(Object.values(result.availability).some(Boolean)).toBe(false);
     expect(result.events).toHaveLength(0);
+  });
+
+  it('leaves out contact and says so, instead of counting it as a setup problem', () => {
+    const laps = manager.session!.laps.map((summary) => store.loadLap(sessionId, summary.lap)!);
+    const hitAt = apexOf(demo.habits.lateBraking) - 120;
+    const nearHit = (e: ChassisEvent) => Math.abs(e.distance - hitAt) < 150;
+    const perLap = new Map<number, number>();
+    for (const e of a.events) if (nearHit(e)) perLap.set(e.lap, (perLap.get(e.lap) ?? 0) + 1);
+    const [target] = [...perLap.entries()].sort((x, y) => y[1] - x[1])[0];
+
+    const trace = laps.find((lap) => lap.summary.lap === target)!.trace;
+    const i = trace.d.findIndex((d) => d >= hitAt);
+    for (let j = i; j < i + 3; j++) trace.latG[j] = 25;
+    const from = trace.d[trace.t.findIndex((t) => t >= trace.t[i] - 1)];
+    const to = trace.d[trace.t.findIndex((t) => t >= trace.t[i] + 3)];
+    const inWindow = (e: ChassisEvent) => e.lap === target && e.distance >= from && e.distance <= to;
+    expect(a.events.some(inWindow)).toBe(true);
+
+    const result = analyseChassis(laps, detected);
+    expect(result.incidents.filter((x) => x.lap === target)).toHaveLength(1);
+    expect(result.events.some(inWindow)).toBe(false);
   });
 });

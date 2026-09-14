@@ -92,6 +92,10 @@ export interface SessionMeta {
   track: TrackInfo;
   car: string;
   carClass: string;
+  /** Where `car` came from. AMS2 doesn't name the player's car, so usually it's you, or your last choice. */
+  carSource?: 'game' | 'chosen' | 'remembered';
+  /** Cars the game named in this session, offered when you pick yours. */
+  vehicles?: string[];
   driver: string;
   sessionType: SessionState;
   laps: LapSummary[];

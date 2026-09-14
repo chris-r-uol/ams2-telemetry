@@ -368,7 +368,7 @@ export class DemoSimulator {
     const damper = q((w) => (travel[w] - this.previousTravel[w]) / dt);
     travel.forEach((t, w) => (this.previousTravel[w] = t));
 
-    const baseRps = v / (2 * Math.PI * WHEEL_RADIUS);
+    const wheelOmega = v / WHEEL_RADIUS;
     const slip = 0.009 * s.latG + (snap ? 0.1 * Math.sign(kappa || 1) : 0);
     return {
       steering: snap ? s.steering * -0.35 : s.steering,
@@ -380,9 +380,10 @@ export class DemoSimulator {
       roll: 0.005 * s.latG,
       travel,
       damper,
-      // AMS2 documents ride height in centimetres.
+      // AMS2's header documents centimetres (the game itself sends metres). The analysis detects either.
       rideCm: q((w) => Math.max(0, w < 2 ? 4.9 - (travel[w] - STATIC_TRAVEL[w]) * 100 : 7 - (travel[w] - STATIC_TRAVEL[w]) * 90)),
-      wheelRps: q((w) => baseRps * (lockUp && w === 0 ? 0.55 : spin && w >= 2 ? 1.25 : 1)),
+      // Like the game: radians per second, negative going forwards.
+      wheelRps: q((w) => -wheelOmega * (lockUp && w === 0 ? 0.55 : spin && w >= 2 ? 1.25 : 1)),
       tyreFlags: q((w) => (kerb && (w % 2 === 0) === leftTurn ? 3 : 7)),
     };
   }

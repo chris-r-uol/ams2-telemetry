@@ -173,6 +173,44 @@ describe('timings packet', () => {
     expect(me.worldPosition[2]).toBeCloseTo(350.5, 5);
     expect(packet.data.participants[0].lapInvalidated).toBe(false);
   });
+
+  it('reads pit mode and car index the way AMS2 packs them', () => {
+    // Raw values from an AMS2 recording: leaving the garage, the player's car index and an AI car's.
+    const base = packParticipantInfo({
+      worldPosition: [0, 0, 0],
+      currentLapDistance: 58,
+      racePosition: 1,
+      sector: 1,
+      raceStateIndex: 2,
+      currentLap: 1,
+      currentTime: -1,
+      currentSectorTime: -1,
+    });
+    const decode = (pitModeSchedule: number, carIndex: number) => {
+      const packet = decodePacket(
+        encodeTimings(header, {
+          numParticipants: 1,
+          participantsChangedTimestamp: 1,
+          eventTimeRemaining: 0,
+          splitTimeAhead: -1,
+          splitTimeBehind: -1,
+          localParticipantIndex: 0,
+          participants: [{ ...base, pitModeSchedule, carIndex }],
+          tickCount: 1,
+        }),
+      );
+      if (packet?.kind !== 'timings') throw new Error('expected a timings packet');
+      return packet.data.participants[0];
+    };
+    expect([4, 5, 3, 0].map((raw) => decode(raw, 0xffff).pitMode)).toEqual([
+      'inGarage',
+      'drivingOutOfGarage',
+      'drivingOutOfPits',
+      'none',
+    ]);
+    expect(decode(0, 0xffff)).toMatchObject({ isHuman: true, carIndex: 0x7fff });
+    expect(decode(0, 356)).toMatchObject({ isHuman: false, carIndex: 356 });
+  });
 });
 
 describe('other packets', () => {

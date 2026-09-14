@@ -2142,3 +2142,38 @@ code {
   font-weight: 600;
   color: var(--ink-muted);
 }
+
+/* ============ Car picker ============ */
+
+.car-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.car-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.car-form .field {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.car-form-hint,
+.form-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.form-error {
+  color: var(--bad-ink);
+  font-weight: 600;
+}
