@@ -55,52 +55,57 @@ export function LastCornerCard({ size }: { size: CardSize }) {
 
   return (
     <LiveCard title={title} size={size} accent={accent} meta={`Lap ${report.lap}`}>
-      <div className="lc-headline">
-        <span className="lc-corner">{report.corner}</span>
-        <span className="lc-delta-block">
-          <DeltaValue seconds={delta} digits={2} words className="lc-delta" />
-          <span className="muted">{against}</span>
-        </span>
+      {/* Two columns when the card is wide (a full card in the Live grid): the story on the left, the chart on the right. */}
+      <div className="lc-split">
+        <div className="lc-main">
+          <div className="lc-headline">
+            <span className="lc-corner">{report.corner}</span>
+            <span className="lc-delta-block">
+              <DeltaValue seconds={delta} digits={2} words className="lc-delta" />
+              <span className="muted">{against}</span>
+            </span>
+          </div>
+          <PhaseStrip phases={report.phases} size={size} />
+          <dl className="lc-facts">
+            <div>
+              <dt>Braking</dt>
+              <dd>{distance(report.brakeEarlierBy, 'earlier', 'later')}</dd>
+            </div>
+            <div>
+              <dt>Slowest point</dt>
+              <dd>
+                {speed(report.minSpeed)}
+                {speedChange(report.minSpeed, report.bestMinSpeed)}
+              </dd>
+            </div>
+            <div>
+              <dt>Throttle</dt>
+              <dd>{distance(report.throttleLaterBy, 'later', 'earlier')}</dd>
+            </div>
+            <div>
+              <dt>Exit</dt>
+              <dd>
+                {speed(report.exitSpeed)}
+                {speedChange(report.exitSpeed, report.bestExitSpeed)}
+              </dd>
+            </div>
+            <div>
+              <dt>Peak slip</dt>
+              <dd>{report.slipAngle !== null ? `${report.slipAngle.toFixed(1)}°` : '–'}</dd>
+            </div>
+          </dl>
+          {report.events.length > 0 && <EventList events={report.events} />}
+          {tip ? (
+            <div className="lc-tip">
+              <strong>{tip.title}</strong>
+              <p>{tip.detail}</p>
+            </div>
+          ) : (
+            <p className="muted">No clear change to make here.</p>
+          )}
+        </div>
+        <CornerProfileChart profile={report.profile} units={units} corner={report.corner} bestLap={report.bestLap} />
       </div>
-      <PhaseStrip phases={report.phases} size={size} />
-      <CornerProfileChart profile={report.profile} units={units} corner={report.corner} bestLap={report.bestLap} />
-      <dl className="lc-facts">
-        <div>
-          <dt>Braking</dt>
-          <dd>{distance(report.brakeEarlierBy, 'earlier', 'later')}</dd>
-        </div>
-        <div>
-          <dt>Slowest point</dt>
-          <dd>
-            {speed(report.minSpeed)}
-            {speedChange(report.minSpeed, report.bestMinSpeed)}
-          </dd>
-        </div>
-        <div>
-          <dt>Throttle</dt>
-          <dd>{distance(report.throttleLaterBy, 'later', 'earlier')}</dd>
-        </div>
-        <div>
-          <dt>Exit</dt>
-          <dd>
-            {speed(report.exitSpeed)}
-            {speedChange(report.exitSpeed, report.bestExitSpeed)}
-          </dd>
-        </div>
-        <div>
-          <dt>Peak slip</dt>
-          <dd>{report.slipAngle !== null ? `${report.slipAngle.toFixed(1)}°` : '–'}</dd>
-        </div>
-      </dl>
-      {report.events.length > 0 && <EventList events={report.events} />}
-      {tip ? (
-        <div className="lc-tip">
-          <strong>{tip.title}</strong>
-          <p>{tip.detail}</p>
-        </div>
-      ) : (
-        <p className="muted">No clear change to make here.</p>
-      )}
     </LiveCard>
   );
 }

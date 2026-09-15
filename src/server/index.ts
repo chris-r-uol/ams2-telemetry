@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { ViteDevServer } from 'vite';
-import type { SourceKind, SourceStatus } from '../shared/model/types.ts';
+import { PLAYBACK_SPEEDS, type SourceKind, type SourceStatus } from '../shared/model/types.ts';
 import { DEFAULT_UDP_PORT } from '../shared/protocol/constants.ts';
 import { AnalysisService } from './analysis-service.ts';
 import { DemoSimulator } from './demo/simulator.ts';
@@ -41,7 +41,7 @@ Sources
   --source <udp|demo|replay>  Where telemetry comes from (default: udp)
   --udp-port <port>           UDP port AMS2 sends to (default: ${DEFAULT_UDP_PORT})
   --file <path>               Recording to replay (with --source replay)
-  --speed <n>                 Playback speed for demo/replay (default: 1)
+  --speed <n>                 Playback speed for demo/replay (default: 1; also in the dashboard)
   --loop                      Loop the replay
   --prefill <laps>            Demo: simulate this many laps instantly before going live
   --record                    Start recording raw packets immediately
@@ -94,7 +94,7 @@ const source = values.source as SourceKind;
 if (!['udp', 'demo', 'replay'].includes(source)) fail(`Unknown source "${values.source}". Use udp, demo or replay.`);
 const port = Number(values.port);
 const udpPort = Number(values['udp-port']);
-const speed = Math.max(0.1, Number(values.speed) || 1);
+let playbackSpeed = Math.max(0.1, Number(values.speed) || 1);
 const frameRate = Math.min(60, Math.max(1, Number(values.rate) || 20));
 const dataDir = resolve(values.data!);
 
@@ -125,12 +125,13 @@ const ingest = (bytes: Uint8Array, at: number = Date.now()) => {
   hub.ingest(bytes, at);
 };
 
-let sourceDetail = '';
+let sourceDetail = () => '';
 let stopSource = () => {};
+let setSourceSpeed: ((speed: number) => void) | null = null;
 
 switch (source) {
   case 'udp': {
-    sourceDetail = `Listening for Automobilista 2 on UDP port ${udpPort}`;
+    sourceDetail = () => `Listening for Automobilista 2 on UDP port ${udpPort}`;
     const udp = startUdpSource({
       port: udpPort,
       onPacket: ingest,
@@ -145,37 +146,51 @@ switch (source) {
     break;
   }
   case 'demo': {
-    const demo = new DemoSimulator(ingest, { speed });
+    const demo = new DemoSimulator(ingest, { speed: playbackSpeed });
     const prefill = Math.max(0, Math.floor(Number(values.prefill) || 0));
     if (prefill > 0) {
       console.log(`  Simulating ${prefill} laps…`);
       demo.runLaps(prefill);
     }
     demo.start();
-    sourceDetail = `Demo driver at ${demo.track.location} (${speed}× speed)`;
+    sourceDetail = () => `Demo driver at ${demo.track.location} (${playbackSpeed}× speed)`;
     stopSource = () => demo.stop();
+    setSourceSpeed = (next) => demo.setSpeed(next);
     break;
   }
   case 'replay': {
     const file = values.file ?? fail('Replay needs a recording: npm run replay -- recordings/your-file.ams2rec');
     if (!existsSync(file)) fail(`Recording not found: ${file}`);
-    sourceDetail = `Replaying ${file} (${speed}× speed${values.loop ? ', looping' : ''})`;
+    sourceDetail = () => `Replaying ${file} (${playbackSpeed}× speed${values.loop ? ', looping' : ''})`;
     const replay = startReplay({
       file,
-      speed,
+      speed: playbackSpeed,
       loop: values.loop!,
       onPacket: ingest,
       onEnd: () => console.log('  Replay finished. The dashboard stays up so you can review the laps.'),
       onError: (error) => console.error('Replay error:', error.message),
     });
     stopSource = replay.close;
+    setSourceSpeed = replay.setSpeed;
     break;
   }
 }
 
+// The demo and replays can run faster or slower from the dashboard. The game can't.
+const applySpeed = setSourceSpeed;
+const changeSpeed = applySpeed
+  ? (next: number): boolean => {
+      if (!(PLAYBACK_SPEEDS as readonly number[]).includes(next)) return false;
+      playbackSpeed = next;
+      applySpeed(next);
+      return true;
+    }
+  : undefined;
+
 const status = (): SourceStatus => ({
   source,
-  detail: sourceDetail,
+  detail: sourceDetail(),
+  playbackSpeed: changeSpeed ? playbackSpeed : null,
   packetsPerSecond: hub.packetsPerSecond,
   packetCounts: hub.packetCounts,
   lastPacketAt: hub.lastPacketAt,
@@ -206,6 +221,7 @@ server.on(
     recordings,
     status,
     version,
+    setPlaybackSpeed: changeSpeed,
     staticDir: join(ROOT, 'dist', 'web'),
     vite,
   }),
@@ -225,7 +241,7 @@ server.listen(port, values.host, () => {
       if (address && address.family === 'IPv4' && !address.internal) lines.push(`              http://${address.address}:${port}`);
     }
   }
-  lines.push(`  Source      ${sourceDetail}`);
+  lines.push(`  Source      ${sourceDetail()}`);
   lines.push(`  Sessions    ${store.root}`);
   lines.push(`  Recordings  ${recordings.dir}${recordings.status ? ' (recording now)' : recordings.autoRecord ? ' (recording every session)' : ''}`);
   if (source === 'udp') {

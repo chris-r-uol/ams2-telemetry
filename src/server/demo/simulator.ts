@@ -106,7 +106,7 @@ export class DemoSimulator {
   readonly completedLaps: { lap: number; lapTime: number; valid: boolean }[] = [];
 
   private readonly emit: (bytes: Uint8Array) => void;
-  private readonly speed: number;
+  private speed: number;
   private readonly tickRate: number;
   private readonly rng: () => number;
   private readonly regionOf: Int16Array;
@@ -167,6 +167,11 @@ export class DemoSimulator {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+  }
+
+  /** Change the real-time multiplier while streaming. */
+  setSpeed(speed: number): void {
+    this.speed = speed;
   }
 
   /** Simulate instantly until `laps` more laps have been completed. */

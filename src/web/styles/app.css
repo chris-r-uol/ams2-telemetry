@@ -512,64 +512,28 @@ code {
   margin-left: auto;
 }
 
+/* Below the preset grid: the track map, car details, traces and recent laps. */
 .live-grid {
   display: grid;
   gap: var(--gap);
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: 760px) {
+@media (min-width: 1100px) {
   .live-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      'delta times'
-      'coach car'
-      'map map'
-      'trace trace'
-      'laps laps';
   }
-}
 
-@media (min-width: 1280px) {
-  .live-grid {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      'delta times map'
-      'coach car map'
-      'trace trace trace'
-      'laps laps laps';
-  }
-}
-
-@media (min-width: 760px) {
-  .delta-card {
-    grid-area: delta;
-  }
-  .times-card {
-    grid-area: times;
-  }
-  .map-card {
-    grid-area: map;
-  }
-  .coach-card {
-    grid-area: coach;
-  }
-  .car-card {
-    grid-area: car;
-  }
-  .trace-card {
-    grid-area: trace;
-  }
+  .trace-card,
   .laps-card {
-    grid-area: laps;
+    grid-column: 1 / -1;
   }
+}
 
-  .live.is-glance .live-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      'delta times'
-      'coach car';
-  }
+.live-more-title {
+  margin: 0.75rem 0;
+  font-size: 1rem;
+  color: var(--ink-2);
 }
 
 .delta-card {
@@ -865,43 +829,6 @@ code {
   font-weight: 650;
 }
 
-/* Glance mode: fewer things, much bigger. */
-
-.live.is-glance .delta-hero {
-  font-size: clamp(4rem, 22cqi, 11rem);
-}
-
-.live.is-glance .times-row dd {
-  font-size: 2rem;
-}
-
-.live.is-glance .times-row.is-current dd {
-  font-size: 2.75rem;
-}
-
-.live.is-glance .tip-head {
-  font-size: 1.375rem;
-}
-
-.live.is-glance .tip p {
-  font-size: 1.0625rem;
-}
-
-.live.is-glance .gear-value {
-  font-size: 5rem;
-}
-
-.live.is-glance .speed-value {
-  font-size: 3.5rem;
-}
-
-.live.is-glance .meter-track {
-  height: 1.1rem;
-}
-
-.live.is-glance .tyre-temp {
-  font-size: 2rem;
-}
 
 /* ============ Session / lap time chart ============ */
 
@@ -2176,4 +2103,353 @@ code {
 .form-error {
   color: var(--bad-ink);
   font-weight: 600;
+}
+
+/* ============ Pedal rugs ============ */
+
+/* Framed, so a pedal at zero still reads as a strip against the card. */
+.cp-rug-track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.ramp {
+  display: inline-block;
+  width: 3.5rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.ramp-label {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============ Playback speed ============ */
+
+.header-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.playback-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.segmented button:disabled,
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ============ Presets ============ */
+
+.preset-board {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.preset-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.preset-tabs,
+.preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.preset-name-label {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.preset-name {
+  width: 12rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.preset-grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .preset-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 899px) {
+  /* One column on narrow screens: cards keep their order instead of their cells. */
+  .preset-slot,
+  .slot-empty {
+    grid-row: auto !important;
+    grid-column: auto !important;
+  }
+}
+
+.preset-slot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.preset-slot > .live-card {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.preset-grid.is-editing .preset-slot > .live-card {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.slot-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--lap);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--lap-wash);
+  font-size: 0.875rem;
+}
+
+.slot-tools-name {
+  margin-right: auto;
+  font-weight: 650;
+}
+
+.slot-empty {
+  display: grid;
+  place-content: center;
+  min-height: 8rem;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.slot-empty:hover,
+.slot-empty:focus-visible {
+  border-color: var(--lap);
+  background: var(--lap-wash);
+  color: var(--ink);
+}
+
+.preset-empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  color: var(--ink-2);
+}
+
+.card-picker {
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 3rem);
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+}
+
+.card-picker::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.card-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.card-picker-head h2 {
+  font-size: 1.125rem;
+}
+
+.card-picker-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-picker-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.card-picker-list li.is-current {
+  border-color: var(--lap);
+}
+
+.card-picker-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.card-picker-text .badge {
+  margin-left: 0.35rem;
+}
+
+.card-picker-text p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.card-picker-sizes {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Wide cards (full size in the grid) split into two columns. */
+.lc-split,
+.dp-split {
+  display: grid;
+  gap: 0.65rem 1.25rem;
+}
+
+.lc-main {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+}
+
+@container (min-width: 44rem) {
+  .lc-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+
+  .dp-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+}
+
+/* ============ Corner steering ============ */
+
+.cl-split {
+  display: grid;
+  gap: 0.65rem 1.25rem;
+}
+
+@container (min-width: 44rem) {
+  .cl-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: start;
+  }
+}
+
+.cl-side {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+}
+
+.corner-line,
+.steer-rugs {
+  margin: 0;
+}
+
+.corner-line svg,
+.steer-rugs svg {
+  display: block;
+  overflow: visible;
+}
+
+/* Best line wide and underneath, yours narrow on top, so both show where they overlap. */
+.cl-best {
+  fill: none;
+  stroke: var(--reference);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cl-own {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cl-arrow,
+.cl-start {
+  fill: var(--ink);
+}
+
+.cl-apex {
+  fill: var(--surface);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.steer-apex {
+  stroke: var(--ink-2);
+  stroke-width: 1.5;
+}
+
+.cl-facts {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.cl-facts dt {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.cl-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.cl-hint {
+  margin: 0;
+  font-size: 0.8125rem;
 }

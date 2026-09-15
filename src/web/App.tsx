@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { describeDelta, describeTip, formatLapTime } from '../shared/format.ts';
+import { PlaybackSpeed } from './components/PlaybackSpeed.tsx';
 import { ConnectionBadge } from './components/ui.tsx';
 import { getLive, useLive } from './lib/live.ts';
 import { href, useRoute, type Route } from './lib/router.ts';
@@ -125,6 +126,7 @@ export function App() {
           </ul>
         </nav>
         <div className="header-status">
+          <PlaybackSpeed />
           <ConnectionBadge />
         </div>
       </header>

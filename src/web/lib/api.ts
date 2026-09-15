@@ -54,6 +54,7 @@ export const api = {
   recordingStop: () => '/api/recordings/stop',
   recordingSettings: () => '/api/recordings/settings',
   sessionCar: (id: string) => `/api/sessions/${encodeURIComponent(id)}/car`,
+  sourceSpeed: () => '/api/source/speed',
   chassis: (id: string) => `/api/sessions/${encodeURIComponent(id)}/chassis`,
   chassisLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/chassis/laps/${lap}`,
 };

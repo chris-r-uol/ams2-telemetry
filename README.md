@@ -40,8 +40,9 @@ lost time, and exactly what to try on the next one.
   exactly on any computer, which makes it the best way to share a problem.
 - **Every lap saved** automatically, with sectors, top speed, fuel and tyre data, and
   downloadable as JSON.
-- **Glance mode** (press <kbd>G</kbd>) for reading from the driving seat, plus dark and light
-  themes and text size up to 150%.
+- **Live presets** for reading from the driving seat: arrange cards on a grid three wide and
+  two high that fits one screen, and switch presets with <kbd>1</kbd>–<kbd>9</kbd>. Plus dark
+  and light themes and text size up to 150%.
 - **Built to be accessible.** Colour-blind-safe palette, and colour is never the only signal:
   deltas carry a sign, an arrow and the word *faster* or *slower*. Keyboard navigation, a table
   view for every chart, and optional screen-reader lap announcements.
@@ -88,11 +89,16 @@ Every suggestion compares you with **yourself**: your best lap, or the lap where
 corner best. If you've done it once, you can do it again. Read
 [how the coach works](docs/how-coaching-works.md).
 
-### Glance mode
+### Live presets
 
-<img src="docs/images/live-glance.png" alt="Glance mode: the live delta shown at a very large size with the word faster, big lap times, the coaching tips in large text, and the car panel with a large gear and speed readout." width="100%">
-
-Only what you can take in within half a second. Toggle it with <kbd>G</kbd>.
+The Live page is a grid of cards, three wide and two high, so a whole preset fits on one
+screen. Every card comes in a **glance** size (one cell) and a **full** size (two cells wide):
+the last corner with its speed, balance and throttle and brake strips, your line and steering
+through it against your best run, the next corner, corner-by-corner time, live balance, grip
+events, delta, lap trend and car status. Start from the Focus, Optimisation and Full presets,
+then choose **Edit layout** to add, resize or swap cards and save your own. Press
+<kbd>1</kbd>–<kbd>9</kbd> to switch between them. The **Card lab** page shows every card in
+both sizes.
 
 ### Tune the car
 

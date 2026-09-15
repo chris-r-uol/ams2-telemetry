@@ -22,30 +22,32 @@ export function DeltaPotentialCard({ size }: { size: CardSize }) {
 
   return (
     <LiveCard title="Delta" size={size} accent={toneOf(delta, 0.05)}>
-      <div className="dp-hero">
-        <DeltaValue seconds={delta} digits={2} words />
+      <div className={size === 'full' ? 'dp-split' : undefined}>
+        <div className="dp-hero">
+          <DeltaValue seconds={delta} digits={2} words />
+        </div>
+        {size === 'full' && (
+          <dl className="dp-facts">
+            <div>
+              <dt>Predicted</dt>
+              <dd>{formatLapTime(predicted)}</dd>
+            </div>
+            <div>
+              <dt>Session best</dt>
+              <dd>{formatLapTime(best)}</dd>
+            </div>
+            <div>
+              <dt>Ideal lap</dt>
+              <dd>
+                {formatLapTime(ideal)}
+                {withinReach !== null && withinReach > 0.005 && (
+                  <span className="muted"> · {withinReach.toFixed(2)} s within reach</span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        )}
       </div>
-      {size === 'detail' && (
-        <dl className="dp-facts">
-          <div>
-            <dt>Predicted</dt>
-            <dd>{formatLapTime(predicted)}</dd>
-          </div>
-          <div>
-            <dt>Session best</dt>
-            <dd>{formatLapTime(best)}</dd>
-          </div>
-          <div>
-            <dt>Ideal lap</dt>
-            <dd>
-              {formatLapTime(ideal)}
-              {withinReach !== null && withinReach > 0.005 && (
-                <span className="muted"> · {withinReach.toFixed(2)} s within reach</span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      )}
     </LiveCard>
   );
 }
@@ -80,7 +82,7 @@ export function OneThingCard({ size }: { size: CardSize }) {
         {shortAction(tip.kind)} <span className="ot-corner">at {tip.corner}</span>
       </p>
       {tip.timeLost >= 0.01 && <p className="ot-worth">Worth about {tip.timeLost.toFixed(2)} s</p>}
-      {size === 'detail' && (
+      {size === 'full' && (
         <>
           <p className="secondary">{text.detail}</p>
           {feedback.tips.length > 1 && (
@@ -200,7 +202,7 @@ export function LapTrendCard({ size }: { size: CardSize }) {
         )}
       </p>
       <p className="lt-trend">{trendText}</p>
-      {size === 'detail' && <LapBars laps={laps} best={best} />}
+      {size === 'full' && <LapBars laps={laps} best={best} />}
     </LiveCard>
   );
 }

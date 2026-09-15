@@ -301,10 +301,28 @@ function profileFor(
   const speed: (number | null)[] = [];
   const bestSpeed: (number | null)[] = [];
   const balance: (number | null)[] = [];
+  const throttle: (number | null)[] = [];
+  const brake: (number | null)[] = [];
+  const steering: (number | null)[] = [];
+  const bestSteering: (number | null)[] = [];
+  const x: (number | null)[] = [];
+  const z: (number | null)[] = [];
+  const bestX: (number | null)[] = [];
+  const bestZ: (number | null)[] = [];
+  const pedal = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null);
+  const finite = (value: number) => (Number.isFinite(value) ? value : null);
   let j = 0;
   for (let d = from; d <= corner.exit; d += PROFILE_STEP) {
     speed.push(valueAt(run, 'speed', d));
     bestSpeed.push(best ? valueAt(best, 'speed', d) : null);
+    throttle.push(pedal(valueAt(run, 'throttle', d)));
+    brake.push(pedal(valueAt(run, 'brake', d)));
+    steering.push(finite(valueAt(run, 'steering', d)));
+    bestSteering.push(best ? finite(valueAt(best, 'steering', d)) : null);
+    x.push(finite(valueAt(run, 'x', d)));
+    z.push(finite(valueAt(run, 'z', d)));
+    bestX.push(best ? finite(valueAt(best, 'x', d)) : null);
+    bestZ.push(best ? finite(valueAt(best, 'z', d)) : null);
     if (chassis && chassis.d.length) {
       while (j < chassis.d.length - 1 && Math.abs(chassis.d[j + 1] - d) <= Math.abs(chassis.d[j] - d)) j++;
       const value = chassis.balance[j];
@@ -313,5 +331,22 @@ function profileFor(
       balance.push(null);
     }
   }
-  return { from, step: PROFILE_STEP, speed, bestSpeed, balance, apex: corner.apex, brakeAt, bestBrakeAt };
+  return {
+    from,
+    step: PROFILE_STEP,
+    speed,
+    bestSpeed,
+    balance,
+    throttle,
+    brake,
+    steering,
+    bestSteering,
+    x,
+    z,
+    bestX,
+    bestZ,
+    apex: corner.apex,
+    brakeAt,
+    bestBrakeAt,
+  };
 }

@@ -53,6 +53,11 @@ describe('live coach on the demo car', () => {
     expect(last.phases).not.toBeNull();
     expect(last.profile.speed.length).toBeGreaterThan(20);
     expect(last.profile.balance.some((v) => v !== null)).toBe(true);
+    expect(last.profile.throttle).toHaveLength(last.profile.speed.length);
+    expect(last.profile.steering).toHaveLength(last.profile.speed.length);
+    expect(last.profile.bestSteering.some((v) => v !== null && v !== 0)).toBe(true);
+    expect(last.profile.x.every((v) => v !== null) && last.profile.bestZ.every((v) => v !== null)).toBe(true);
+    expect([...last.profile.throttle, ...last.profile.brake].every((v) => v === null || (v >= 0 && v <= 1))).toBe(true);
   });
 
   it('keeps a plan for the corners ahead, built from your best runs', () => {

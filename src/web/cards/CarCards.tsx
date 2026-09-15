@@ -53,7 +53,7 @@ export function BalanceMeterCard({ size }: { size: CardSize }) {
         <span>Neutral</span>
         <span>Understeer</span>
       </div>
-      {size === 'detail' && <p className="muted">{explanation}</p>}
+      {size === 'full' && <p className="muted">{explanation}</p>}
     </LiveCard>
   );
 }

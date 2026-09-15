@@ -1,11 +1,11 @@
 /**
- * The second-monitor view. Big, high-contrast numbers first; detail below.
- * Components subscribe to only the live values they show, so a 20 Hz stream
- * doesn't re-render the whole page.
+ * The second-monitor view: a preset of live cards that fits on one screen, with
+ * the track map, car details, traces and recent laps below. Components subscribe
+ * to only the live values they show, so a 20 Hz stream doesn't re-render the
+ * whole page.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  describeTip,
   formatLapTime,
   formatSectorTime,
   pressureIn,
@@ -20,10 +20,11 @@ import {
 import type { FlagColour } from '../../shared/protocol/constants.ts';
 import type { FuelState, LapFeedback, LiveFrame, SessionMeta } from '../../shared/model/types.ts';
 import { bestLap, bestSectors, gearLabel, LapStatus } from '../components/laps.tsx';
+import { PresetBoard } from '../components/PresetBoard.tsx';
+import { RecordButton } from '../components/RecordButton.tsx';
 import { TraceStack, type TracePanel } from '../components/TraceStack.tsx';
 import { TrackMap, type MapSegment } from '../components/TrackMap.tsx';
 import { Card, DeltaValue, EmptyState } from '../components/ui.tsx';
-import { RecordButton } from '../components/RecordButton.tsx';
 import { api, useApi, type LiveReferenceDto } from '../lib/api.ts';
 import { getLive, getTrail, subscribeLive, useLive } from '../lib/live.ts';
 import { href } from '../lib/router.ts';
@@ -42,36 +43,6 @@ const FLAG_LABELS: Partial<Record<FlagColour, string>> = {
   chequered: 'Chequered flag',
 };
 
-function useGlanceMode(): [boolean, () => void] {
-  const [glance, setGlance] = useState(() => {
-    try {
-      return localStorage.getItem('ams2-coach:glance') === '1';
-    } catch {
-      return false;
-    }
-  });
-  const toggle = () =>
-    setGlance((current) => {
-      try {
-        localStorage.setItem('ams2-coach:glance', current ? '0' : '1');
-      } catch {
-        // ignore
-      }
-      return !current;
-    });
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (event.key.toLowerCase() !== 'g' || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
-      toggle();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  return [glance, toggle];
-}
-
 export function LiveView() {
   const settings = useSettings();
   const sessionId = useLive((s) => s.frame?.sessionId ?? null);
@@ -80,7 +51,6 @@ export function LiveView() {
   const session = useLive((s) => s.session);
   const feedback = useLive((s) => s.feedback);
   const source = useLive((s) => s.status?.source ?? null);
-  const [glance, toggleGlance] = useGlanceMode();
 
   const reference = useApi<LiveReferenceDto | null>(sessionId ? api.liveReference() : null, `${sessionId}:${referenceKey}`);
 
@@ -89,17 +59,20 @@ export function LiveView() {
   }
 
   return (
-    <div className={`live ${glance ? 'is-glance' : ''}`}>
-      <SessionStrip session={session} glance={glance} onToggleGlance={toggleGlance} />
-      <div className="live-grid">
-        <DeltaCard />
-        <LapTimesCard session={session} />
-        {!glance && <MapCard reference={reference.data ?? null} feedback={feedback} mirror={settings.mirrorMap} />}
-        <CoachCard feedback={feedback} units={settings.units} />
-        <CarCard settings={settings} glance={glance} />
-        {!glance && <LiveTraceCard reference={reference.data ?? null} units={settings.units} />}
-        {!glance && <RecentLaps session={session} />}
-      </div>
+    <div className="live">
+      <SessionStrip session={session} />
+      <PresetBoard />
+      <section aria-labelledby="live-more-title">
+        <h2 id="live-more-title" className="live-more-title">
+          Track, car and traces
+        </h2>
+        <div className="live-grid">
+          <MapCard reference={reference.data ?? null} feedback={feedback} mirror={settings.mirrorMap} />
+          <CarCard settings={settings} />
+          <LiveTraceCard reference={reference.data ?? null} units={settings.units} />
+          <RecentLaps session={session} />
+        </div>
+      </section>
     </div>
   );
 }
@@ -140,16 +113,9 @@ function WaitingForGame({ receiving, source }: { receiving: boolean; source: str
   );
 }
 
-function SessionStrip({
-  session,
-  glance,
-  onToggleGlance,
-}: {
-  session: SessionMeta | null;
-  glance: boolean;
-  onToggleGlance: () => void;
-}) {
+function SessionStrip({ session }: { session: SessionMeta | null }) {
   const lap = useLive((s) => s.frame?.lap ?? 0);
+  const lapTime = useLive((s) => s.frame?.lapTime ?? 0);
   const sector = useLive((s) => s.frame?.sector ?? 1);
   const position = useLive((s) => s.frame?.position ?? 0);
   const participants = useLive((s) => s.frame?.numParticipants ?? 0);
@@ -180,6 +146,10 @@ function SessionStrip({
           <dd className="tabular">{lap || '–'}</dd>
         </div>
         <div>
+          <dt>Lap time</dt>
+          <dd className="tabular">{lapTime > 0 ? formatLapTime(lapTime) : '–'}</dd>
+        </div>
+        <div>
           <dt>Sector</dt>
           <dd className="tabular">{sector}</dd>
         </div>
@@ -203,81 +173,8 @@ function SessionStrip({
       </div>
       <div className="strip-actions">
         <RecordButton />
-        <button type="button" className="btn" aria-pressed={glance} onClick={onToggleGlance}>
-          Glance mode <kbd aria-hidden="true">G</kbd>
-        </button>
       </div>
     </div>
-  );
-}
-
-function DeltaCard() {
-  const delta = useLive((s) => s.frame?.delta ?? null);
-  const referenceLap = useLive((s) => s.frame?.referenceLap ?? null);
-  const referenceTime = useLive((s) => s.frame?.referenceLapTime ?? null);
-  const referenceSource = useLive((s) => s.frame?.referenceSource ?? null);
-  const pitMode = useLive((s) => s.frame?.pitMode ?? 'none');
-  const invalid = useLive((s) => s.frame?.lapInvalid ?? false);
-  const tone = delta === null ? '' : delta >= 0.05 ? 'tone-slower' : delta <= -0.05 ? 'tone-faster' : 'tone-level';
-
-  let context = 'Set a clean flying lap to get a live delta.';
-  if (referenceTime !== null) {
-    const name = referenceSource === 'all-time' ? 'your all-time best' : `session best, lap ${referenceLap}`;
-    context = delta === null && pitMode !== 'none' ? 'The delta starts when you cross the line.' : `vs ${name} · ${formatLapTime(referenceTime)}`;
-  }
-
-  return (
-    <section className={`card delta-card ${tone}`} aria-labelledby="delta-title">
-      <h2 id="delta-title">Live delta</h2>
-      <div className="delta-hero">
-        <DeltaValue seconds={delta} digits={2} words />
-      </div>
-      <p className="delta-context">{context}</p>
-      {invalid && (
-        <p className="badge badge-warning delta-invalid">
-          <span aria-hidden="true">{'⚠'}</span> This lap is invalidated
-        </p>
-      )}
-    </section>
-  );
-}
-
-function LapTimesCard({ session }: { session: SessionMeta | null }) {
-  const lapTime = useLive((s) => s.frame?.lapTime ?? 0);
-  const predicted = useLive((s) => s.frame?.predictedLapTime ?? null);
-  const last = session?.laps.at(-1) ?? null;
-  const best = bestLap(session);
-
-  return (
-    <Card title="Lap times" className="times-card">
-      <dl className="times">
-        <div className="times-row is-current">
-          <dt>Current</dt>
-          <dd className="tabular">{formatLapTime(lapTime)}</dd>
-        </div>
-        <div className="times-row">
-          <dt>Predicted</dt>
-          <dd className="tabular">{formatLapTime(predicted)}</dd>
-        </div>
-        <div className="times-row">
-          <dt>Last lap</dt>
-          <dd>
-            <span className="tabular">{formatLapTime(last?.lapTime)}</span>
-            {last && best && last !== best && last.lapTime !== null && (
-              <DeltaValue seconds={last.lapTime - best.lapTime!} />
-            )}
-            {last && !last.valid && <span className="badge badge-warning">Invalid</span>}
-          </dd>
-        </div>
-        <div className="times-row">
-          <dt>Session best</dt>
-          <dd>
-            <span className="tabular">{formatLapTime(best?.lapTime)}</span>
-            {best && <span className="muted"> lap {best.lap}</span>}
-          </dd>
-        </div>
-      </dl>
-    </Card>
   );
 }
 
@@ -311,58 +208,6 @@ function MapCard({
         mirror={mirror}
         title="Track map with your car's current position"
       />
-    </Card>
-  );
-}
-
-function CoachCard({ feedback, units }: { feedback: LapFeedback | null; units: Units }) {
-  if (!feedback) {
-    return (
-      <Card title="Coach" className="coach-card">
-        <p className="muted">Drive a few clean laps and the coach will show you where the time is.</p>
-      </Card>
-    );
-  }
-  return (
-    <Card
-      title="Focus for your next lap"
-      className="coach-card"
-      description={`Based on lap ${feedback.lap} · ${formatLapTime(feedback.lapTime)}`}
-      actions={
-        feedback.personalBest ? (
-          <span className="badge badge-good">{'★'} New session best</span>
-        ) : !feedback.valid ? (
-          <span className="badge badge-warning">
-            <span aria-hidden="true">{'⚠'}</span> Invalid lap
-          </span>
-        ) : null
-      }
-    >
-      {feedback.tips.length > 0 ? (
-        <ol className="tips">
-          {feedback.tips.map((tip) => {
-            const text = describeTip(tip, units);
-            return (
-              <li key={`${tip.cornerId}-${tip.kind}`} className="tip">
-                <div className="tip-head">
-                  <strong>{text.title}</strong>
-                  {tip.timeLost >= 0.01 && <DeltaValue seconds={tip.timeLost} digits={2} />}
-                </div>
-                <p>{text.detail}</p>
-              </li>
-            );
-          })}
-        </ol>
-      ) : (
-        <p className="muted">
-          {feedback.valid && feedback.lapTime !== null
-            ? 'No corner stood out. You matched your best run through every corner within a few hundredths.'
-            : 'Tips appear after clean flying laps.'}
-        </p>
-      )}
-      <p className="card-footer-link">
-        <a href={href({ name: 'coach', id: feedback.sessionId })}>Full session coaching</a>
-      </p>
     </Card>
   );
 }
@@ -463,7 +308,7 @@ function Fuel({ fuel }: { fuel: FuelState }) {
   );
 }
 
-function CarCard({ settings, glance }: { settings: Settings; glance: boolean }) {
+function CarCard({ settings }: { settings: Settings }) {
   const frame = useLive((s) => s.frame);
   if (!frame) return null;
   const { units } = settings;
@@ -486,10 +331,10 @@ function CarCard({ settings, glance }: { settings: Settings; glance: boolean }) 
       <div className="pedals">
         <Meter label="Throttle" value={frame.throttle} max={1} display={pct(frame.throttle)} className="meter-throttle" />
         <Meter label="Brake" value={frame.brake} max={1} display={pct(frame.brake)} className="meter-brake" />
-        {!glance && <SteeringMeter value={frame.steering} />}
+        <SteeringMeter value={frame.steering} />
       </div>
       <Tyres frame={frame} settings={settings} />
-      {!glance && <Fuel fuel={frame.fuel} />}
+      <Fuel fuel={frame.fuel} />
     </Card>
   );
 }

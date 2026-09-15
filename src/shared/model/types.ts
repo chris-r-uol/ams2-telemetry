@@ -44,7 +44,7 @@ export const TRACE_CHANNELS = [
   'rideFR',
   'rideRL',
   'rideRR',
-  'wheelFL', // wheel rotation, rev/s
+  'wheelFL', // wheel rotation as sent (AMS2: rad/s, negative going forwards)
   'wheelFR',
   'wheelRL',
   'wheelRR',
@@ -187,6 +187,17 @@ export interface CornerProfile {
   bestSpeed: (number | null)[];
   /** Extra steering as a share of what the car needed: + understeer, − oversteer. */
   balance: (number | null)[];
+  /** Pedal positions, 0 to 1. */
+  throttle: (number | null)[];
+  brake: (number | null)[];
+  /** Steering, −1 full left to 1 full right: this run and your best run through the corner. */
+  steering: (number | null)[];
+  bestSteering: (number | null)[];
+  /** World position along each line, metres. */
+  x: (number | null)[];
+  z: (number | null)[];
+  bestX: (number | null)[];
+  bestZ: (number | null)[];
   apex: number;
   brakeAt: number | null;
   bestBrakeAt: number | null;
@@ -300,11 +311,16 @@ export interface RecordingInfo {
 export interface SourceStatus {
   source: SourceKind;
   detail: string;
+  /** Demo or replay speed, which the dashboard can change. Null when the game is the source. */
+  playbackSpeed: number | null;
   packetsPerSecond: number;
   packetCounts: Record<string, number>;
   lastPacketAt: number | null;
   recording: RecordingStatus | null;
 }
+
+/** Speeds the dashboard offers for the demo and replays. */
+export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
 
 export type ServerMessage =
   | {

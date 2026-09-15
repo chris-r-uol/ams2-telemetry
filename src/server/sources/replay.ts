@@ -44,15 +44,20 @@ export interface ReplayOptions {
   onError?: (error: Error) => void;
 }
 
-/** Replay a recording with its original timing, scaled by `speed`. */
-export function startReplay(options: ReplayOptions): { close(): void } {
+/** Replay a recording with its original timing, scaled by a speed that can change while it plays. */
+export function startReplay(options: ReplayOptions): { close(): void; setSpeed(speed: number): void } {
   let stopped = false;
+  let speed = options.speed;
+  // Wall-clock and recording time at the last start or change of speed.
+  let anchorWall = performance.now();
+  let anchorOffset = 0;
   const run = async () => {
     do {
-      const startedAt = performance.now();
+      anchorWall = performance.now();
+      anchorOffset = 0;
       for await (const { offsetMs, bytes } of readRecording(options.file)) {
         if (stopped) return;
-        const wait = startedAt + offsetMs / options.speed - performance.now();
+        const wait = anchorWall + (offsetMs - anchorOffset) / speed - performance.now();
         if (wait > 4) await sleep(wait);
         options.onPacket(bytes, Date.now());
       }
@@ -63,6 +68,12 @@ export function startReplay(options: ReplayOptions): { close(): void } {
   return {
     close: () => {
       stopped = true;
+    },
+    setSpeed: (next: number) => {
+      const now = performance.now();
+      anchorOffset += (now - anchorWall) * speed;
+      anchorWall = now;
+      speed = next;
     },
   };
 }

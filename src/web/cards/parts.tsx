@@ -5,10 +5,11 @@ import { useRef, type ReactNode } from 'react';
 import type { ChassisEventKind, PhaseBalance, Wheel } from '../../shared/analysis/chassis.ts';
 import { signedPercent, speedIn, speedLabel, type Units } from '../../shared/format.ts';
 import type { CornerProfile, LiveEvent } from '../../shared/model/types.ts';
+import { colourAt, colourGradient, type ColourScale } from '../lib/colormaps.ts';
 import { useElementWidth } from '../lib/useElementWidth.ts';
 
-/** Glance: one or two big things, for focus mode. Detail: the fuller version. */
-export type CardSize = 'glance' | 'detail';
+/** Glance: one cell of the Live grid. Full: two cells wide, with more detail. */
+export type CardSize = 'glance' | 'full';
 export type Accent = 'faster' | 'slower' | 'attention' | null;
 
 export function toneOf(seconds: number | null | undefined, threshold = 0.02): Accent {
@@ -133,7 +134,7 @@ export function PhaseStrip({
           <li key={name} className={`phase is-${verdict ?? 'unknown'}`}>
             <span className="phase-name">{name}</span>
             <span className="phase-verdict">{verdict ? VERDICT_WORDS[verdict] : '–'}</span>
-            {size === 'detail' && phase?.ratio != null && (
+            {size === 'full' && phase?.ratio != null && (
               <span className="phase-amount tabular">{signedPercent(phase.ratio)} steering</span>
             )}
           </li>
@@ -169,12 +170,20 @@ export function CornerProfileChart({
   const bestValues = best.filter((v): v is number => v !== null);
   const values = [...ownValues, ...bestValues];
   const hasBalance = profile.balance.some((v) => v !== null);
+  // Pedal positions as colour strips under the balance band. Profiles sent before they existed have none.
+  const allRugs: { label: string; values: (number | null)[]; scale: ColourScale }[] = [
+    { label: 'Throttle', values: profile.throttle ?? [], scale: 'viridis' },
+    { label: 'Brake', values: profile.brake ?? [], scale: 'plasma' },
+  ];
+  const rugs = allRugs.filter((rug) => rug.values.some((v) => v !== null));
 
   const pad = { left: 58, right: 12, top: 34 };
   const plotH = 100;
   const bandTop = pad.top + plotH + 10;
   const bandH = 12;
-  const height = bandTop + bandH + 20;
+  const rowGap = 5;
+  const rowTop = (row: number) => bandTop + row * (bandH + rowGap);
+  const height = rowTop(rugs.length) + bandH + 20;
   const plotW = Math.max(10, width - pad.left - pad.right);
   const lo = values.length ? Math.floor(Math.min(...values) / 10) * 10 : 0;
   const hi = values.length ? Math.max(lo + 10, Math.ceil(Math.max(...values) / 10) * 10) : 10;
@@ -216,9 +225,22 @@ export function CornerProfileChart({
   ).filter((m): m is { d: number; text: string; className: string; row: number } => m !== null);
 
   const unit = speedLabel(units.speed);
+  const brakes = (profile.brake ?? []).filter((v): v is number => v !== null);
+  const apexIndex = Math.round((profile.apex - profile.from) / profile.step);
+  const fullThrottleAt = (profile.throttle ?? []).findIndex((v, i) => i >= apexIndex && v !== null && v >= 0.95);
+  const pedalSummary = rugs.length
+    ? ` Brake up to ${Math.round(Math.max(0, ...brakes) * 100)}%, ${
+        fullThrottleAt < 0
+          ? 'not back to full throttle by the exit'
+          : fullThrottleAt === apexIndex
+            ? 'full throttle by the apex'
+            : `full throttle ${Math.round((fullThrottleAt - apexIndex) * profile.step)} m after the apex`
+      }.`
+    : '';
   const summary =
     `Speed through ${corner}: slowest ${ownValues.length ? Math.round(Math.min(...ownValues)) : '–'} ${unit}` +
-    (bestValues.length ? ` against ${Math.round(Math.min(...bestValues))} ${unit} on your best run.` : '.');
+    (bestValues.length ? ` against ${Math.round(Math.min(...bestValues))} ${unit} on your best run.` : '.') +
+    pedalSummary;
 
   return (
     <figure className="corner-profile">
@@ -262,6 +284,22 @@ export function CornerProfileChart({
                 Appears once steering has been calibrated
               </text>
             )}
+            {rugs.map((rug, r) => {
+              const top = rowTop(r + 1);
+              return (
+                <g key={rug.label}>
+                  <text className="cp-axis" x={pad.left - 8} y={top + bandH / 2} textAnchor="end" dominantBaseline="middle">
+                    {rug.label}
+                  </text>
+                  {rug.values.map((v, i) =>
+                    v === null ? null : (
+                      <rect key={i} x={x(i) - cell / 2} y={top} width={cell + 0.5} height={bandH} fill={colourAt(rug.scale, v)} />
+                    ),
+                  )}
+                  <rect className="cp-rug-track" x={pad.left - cell / 2} y={top} width={plotW + cell} height={bandH} />
+                </g>
+              );
+            })}
             {inPlot(xAt(profile.apex)) && (
               <text className="cp-axis" x={xAt(profile.apex)} y={height - 4} textAnchor="middle">
                 Apex
@@ -293,6 +331,14 @@ export function CornerProfileChart({
           <span className="swatch swatch-oversteer" aria-hidden="true" />
           Oversteer
         </span>
+        {rugs.map((rug) => (
+          <span key={rug.label} className="legend-item">
+            {rug.label}{' '}
+            <span className="ramp-label">0%</span>{' '}
+            <span className="ramp" style={{ backgroundImage: colourGradient(rug.scale) }} aria-hidden="true" />{' '}
+            <span className="ramp-label">100%</span>
+          </span>
+        ))}
       </figcaption>
     </figure>
   );
