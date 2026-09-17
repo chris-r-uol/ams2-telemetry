@@ -94,8 +94,9 @@ corner best. If you've done it once, you can do it again. Read
 The Live page is a grid of cards, three wide and two high, so a whole preset fits on one
 screen. Every card comes in a **glance** size (one cell) and a **full** size (two cells wide):
 the last corner with its speed, balance and throttle and brake strips, your line and steering
-through it against your best run, the next corner, corner-by-corner time, live balance, grip
-events, delta, lap trend and car status. Start from the Focus, Optimisation and Full presets,
+through it against your best run, a grip circle showing how much of the car's grip you used
+through it, the next corner, corner-by-corner time, live balance, grip events, delta, lap trend
+and car status. Start from the Focus, Optimisation and Full presets,
 then choose **Edit layout** to add, resize or swap cards and save your own. Press
 <kbd>1</kbd>–<kbd>9</kbd> to switch between them. The **Card lab** page shows every card in
 both sizes.

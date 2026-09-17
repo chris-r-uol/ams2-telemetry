@@ -373,7 +373,7 @@ export function bodySlipAngle(vLat: number, vLon: number, velocityAxesSwapped: b
  * nothing about the setup, so they're left out of calibration and patterns.
  * Contact shows up as horizontal acceleration the car can't corner or brake with.
  */
-function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): boolean[] {
+export function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): boolean[] {
   const n = tr.t.length;
   const vLat = channel(tr, 'vLat');
   const vLon = channel(tr, 'vLon');

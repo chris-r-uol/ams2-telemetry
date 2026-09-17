@@ -7,6 +7,7 @@ import {
   analyseRun,
   bodySlipAngle,
   calibrate,
+  incidentMask,
   neutralSteering,
   type ChannelAvailability,
   type ChassisCalibration,
@@ -14,10 +15,12 @@ import {
 } from '../shared/analysis/chassis.ts';
 import { tipsForCorner } from '../shared/analysis/coach.ts';
 import type { Corner } from '../shared/analysis/corners.ts';
+import { gripEnvelope, gripRun, type GripEnvelope, type GripRun, type GripSamples } from '../shared/analysis/grip.ts';
 import { cornerMetrics } from '../shared/analysis/metrics.ts';
 import { lapLength, resampleByDistance, valueAt, type ResampledLap } from '../shared/analysis/resample.ts';
 import { coachableLaps, type AnalysedLap } from '../shared/analysis/session.ts';
 import type {
+  CornerGrip,
   CornerPlan,
   CornerProfile,
   CornerReport,
@@ -46,6 +49,7 @@ export class LiveCoach {
   private readonly listeners = new Set<(insights: LiveInsights) => void>();
   private recentLaps: { summary: LapSummary; trace: LapTrace }[] = [];
   private calibration: { availability: ChannelAvailability; calibration: ChassisCalibration } | null = null;
+  private grip: GripEnvelope | null = null;
   private sessionId: string | null = null;
   private lap = -1;
   private done = new Set<number>();
@@ -116,6 +120,7 @@ export class LiveCoach {
     this.sessionId = sessionId;
     this.recentLaps = [];
     this.calibration = null;
+    this.grip = null;
     this.lap = -1;
     this.done = new Set();
     this.previous = null;
@@ -165,6 +170,11 @@ export class LiveCoach {
     if (summary.kind !== 'partial') {
       this.recentLaps = [...this.recentLaps, { summary, trace }].slice(-CALIBRATION_LAPS);
       this.calibration = calibrate(this.recentLaps);
+      const { impactG, velocityAxesSwapped } = this.calibration.calibration;
+      this.grip = gripEnvelope(
+        this.recentLaps.map((l) => l.trace),
+        this.recentLaps.map((l) => incidentMask(l.trace, impactG, velocityAxesSwapped)),
+      );
     }
     this.rebuildPlans(feedback);
     this.emit();
@@ -186,6 +196,21 @@ export class LiveCoach {
     this.straightTicks = 0;
     const ratio = Math.max(-1, Math.min(1, ((tick.steering - need) * Math.sign(need)) / Math.abs(need)));
     this.balance = this.balance === null ? ratio : this.balance + (ratio - this.balance) * BALANCE_SMOOTHING;
+  }
+
+  /** Distance ranges of this lap near a spin or contact. */
+  private incidentsIn(trace: LapTrace): [number, number][] {
+    if (!this.calibration) return [];
+    const { impactG, velocityAxesSwapped } = this.calibration.calibration;
+    const mask = incidentMask(trace, impactG, velocityAxesSwapped);
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < mask.length; i++) {
+      if (!mask[i]) continue;
+      const last = ranges.at(-1);
+      if (last && mask[i - 1]) last[1] = Math.max(last[1], trace.d[i]);
+      else ranges.push([trace.d[i], trace.d[i]]);
+    }
+    return ranges;
   }
 
   /** Your fastest run through a corner this session, from braking zone to exit. */
@@ -244,6 +269,7 @@ export class LiveCoach {
       events,
       tip: tip ?? null,
       profile: profileFor(corner, run, best?.lap.resampled ?? null, chassis, metrics.brakePoint, bestMetrics?.brakePoint ?? null),
+      grip: this.grip ? cornerGrip(this.grip, corner, run, best?.lap.resampled ?? null, this.incidentsIn(trace)) : null,
     };
 
     if (current) {
@@ -289,6 +315,33 @@ function through(lap: ResampledLap, corner: Corner): number {
   return valueAt(lap, 't', corner.exit) - valueAt(lap, 't', corner.entry);
 }
 
+/** Profiles start a little before the braking zone. */
+function profileStart(corner: Corner): number {
+  return Math.max(0, corner.entry - 40);
+}
+
+/** Grip used through a corner, on the profile's points. */
+function cornerGrip(
+  envelope: GripEnvelope,
+  corner: Corner,
+  run: ResampledLap,
+  best: ResampledLap | null,
+  incidents: [number, number][],
+): CornerGrip {
+  const along = (lap: ResampledLap, excluded: [number, number][]): GripRun => {
+    const samples: GripSamples = { d: [], t: [], speed: [], throttle: [], brake: [], latG: [], lonG: [] };
+    for (let d = profileStart(corner); d <= corner.exit; d += PROFILE_STEP) {
+      samples.d.push(d);
+      for (const channel of ['t', 'speed', 'throttle', 'brake', 'latG', 'lonG'] as const) {
+        samples[channel].push(valueAt(lap, channel, d));
+      }
+    }
+    const near = samples.d.map((d) => excluded.some(([from, to]) => d >= from - PROFILE_STEP && d <= to + PROFILE_STEP));
+    return gripRun(envelope, samples, near);
+  };
+  return { run: along(run, incidents), best: best ? along(best, []) : null };
+}
+
 function profileFor(
   corner: Corner,
   run: ResampledLap,
@@ -297,7 +350,7 @@ function profileFor(
   brakeAt: number | null,
   bestBrakeAt: number | null,
 ): CornerProfile {
-  const from = Math.max(0, corner.entry - 40);
+  const from = profileStart(corner);
   const speed: (number | null)[] = [];
   const bestSpeed: (number | null)[] = [];
   const balance: (number | null)[] = [];

@@ -60,6 +60,18 @@ describe('live coach on the demo car', () => {
     expect([...last.profile.throttle, ...last.profile.brake].every((v) => v === null || (v >= 0 && v <= 1))).toBe(true);
   });
 
+  it('measures grip used through the corner, for this run and the best run', () => {
+    const grip = insights.lastCorner!.grip!;
+    expect(grip).not.toBeNull();
+    expect(grip.run.use).toHaveLength(insights.lastCorner!.profile.speed.length);
+    expect(grip.best).not.toBeNull();
+    for (const summary of [grip.run.summary, grip.best!.summary]) {
+      expect(summary.use).toBeGreaterThan(0.4);
+      expect(summary.use).toBeLessThanOrEqual(1);
+    }
+    expect(grip.run.lat.some((v) => v !== null && Math.abs(v) > 0.5)).toBe(true);
+  });
+
   it('keeps a plan for the corners ahead, built from your best runs', () => {
     expect(insights.plans).toHaveLength(manager.corners.length);
     expect(insights.plans.every((p) => p.bestLap !== null)).toBe(true);

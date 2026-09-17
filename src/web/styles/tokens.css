@@ -29,6 +29,8 @@
   /* Pedals: always shown next to a text label. */
   --throttle: #1baf7a;
   --brake: #eb6834;
+  /* Grip left unused: shaded strips, always with a legend. */
+  --grip: #8a5cd0;
 
   /* Status: time gained / lost, tyre windows. Always with a sign, icon and words. */
   --good: #0ca30c;
@@ -71,6 +73,7 @@
     --reference: #898781;
     --throttle: #199e70;
     --brake: #d95926;
+    --grip: #a07ce0;
     --good-ink: #3dbb3d;
     --bad-ink: #ff8f85;
     --warning-ink: #fab219;
@@ -101,6 +104,7 @@
   --reference: #898781;
   --throttle: #199e70;
   --brake: #d95926;
+  --grip: #a07ce0;
   --good-ink: #3dbb3d;
   --bad-ink: #ff8f85;
   --warning-ink: #fab219;

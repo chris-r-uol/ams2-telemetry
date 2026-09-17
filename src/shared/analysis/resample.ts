@@ -1,4 +1,5 @@
 import type { LapTrace } from '../model/types.ts';
+import { smoothInTime } from './grip.ts';
 
 export const RESAMPLED_CHANNELS = [
   't',
@@ -23,6 +24,9 @@ export type ResampledLap = { step: number; d: number[] } & Record<ResampledChann
 /** Channels that hold discrete values and must not be interpolated. */
 const STEPPED = new Set<ResampledChannel>(['gear', 'off']);
 
+/** Averaged over a moment first: single g samples carry kerb and bump noise, and a 2 m grid would pick them at random. */
+const SMOOTHED = new Set<ResampledChannel>(['latG', 'lonG']);
+
 export const DEFAULT_STEP_METRES = 2;
 
 /**
@@ -44,6 +48,12 @@ export function resampleByDistance(trace: LapTrace, step = DEFAULT_STEP_METRES, 
   }
   if (order.length < 2) return out;
 
+  const source: Partial<Record<ResampledChannel, number[]>> = {};
+  for (const channel of RESAMPLED_CHANNELS) {
+    const values = trace[channel];
+    source[channel] = SMOOTHED.has(channel) && values?.length === trace.t.length ? smoothInTime(values, trace.t) : values;
+  }
+
   const end = length ?? trace.d[order[order.length - 1]];
   const points = Math.floor(end / step) + 1;
   let j = 0;
@@ -57,7 +67,7 @@ export function resampleByDistance(trace: LapTrace, step = DEFAULT_STEP_METRES, 
     const f = Math.max(0, Math.min(1, (target - d0) / (d1 - d0)));
     out.d.push(target);
     for (const channel of RESAMPLED_CHANNELS) {
-      const values = trace[channel];
+      const values = source[channel];
       const a = values?.[i0] ?? 0;
       const b = values?.[i1] ?? 0;
       out[channel].push(STEPPED.has(channel) ? (f < 0.5 ? a : b) : a + (b - a) * f);

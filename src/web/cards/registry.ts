@@ -6,6 +6,7 @@ import type { ComponentType } from 'react';
 import { BalanceMeterCard, CarStatusCard, GripEventsCard } from './CarCards.tsx';
 import { CornerStripCard, LastCornerCard, NextCornerCard } from './CornerCards.tsx';
 import { DeltaPotentialCard, LapTrendCard, OneThingCard } from './DriverCards.tsx';
+import { CornerGripCard } from './GripCard.tsx';
 import type { CardSize } from './parts.tsx';
 import { CornerSteeringCard } from './SteeringCard.tsx';
 
@@ -19,7 +20,8 @@ export type CardId =
   | 'delta'
   | 'lap-trend'
   | 'car'
-  | 'corner-steering';
+  | 'corner-steering'
+  | 'corner-grip';
 
 export type CardKind = 'insight' | 'timing' | 'hud';
 
@@ -121,6 +123,15 @@ export const CARDS: CardDefinition[] = [
     name: 'Last corner steering',
     Component: CornerSteeringCard,
     what: 'Your line through the corner you just drove, drawn over your best run, with steering along the way as colour strips: blue for left, white for straight, red for right. A short, sharp peak of steering is a V line; a long, even hold is a U line.',
+    updates: 'Once per corner, as you exit',
+    kind: 'insight',
+  },
+  {
+    id: 'corner-grip',
+    letter: 'K',
+    name: 'Last corner grip',
+    Component: CornerGripCard,
+    what: "How much of the car's grip you used through the corner you just drove, as the g-g diagram (friction circle) coaches use. The circle is the most grip you've shown at each speed, so wherever your trace cuts inside it, grip went unused. Shows where along the corner the biggest gap was, braking, off the pedals or on part throttle, against your best run.",
     updates: 'Once per corner, as you exit',
     kind: 'insight',
   },

@@ -2453,3 +2453,175 @@ code {
   margin: 0;
   font-size: 0.8125rem;
 }
+
+/* ============ Corner grip ============ */
+
+.gc-split {
+  display: grid;
+  gap: 0.5rem 1rem;
+}
+
+@container (min-width: 24rem) {
+  .gc-split {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+}
+
+.gc-side {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.grip-circle {
+  margin: 0;
+}
+
+.grip-circle svg {
+  display: block;
+  overflow: visible;
+}
+
+.gc-limit {
+  fill: var(--surface-2);
+  stroke: var(--ink-2);
+  stroke-width: 1.5;
+}
+
+.gc-half {
+  fill: none;
+  stroke: var(--axis);
+  stroke-dasharray: 3 3;
+}
+
+.gc-axis {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+/* Ring labels sit on the trace's side of the circle, so they get a halo. */
+.gc-label {
+  paint-order: stroke;
+  stroke: var(--surface-2);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Best run wide and underneath, this run narrow on top, as on the steering card. */
+.gc-best {
+  fill: none;
+  stroke: var(--reference);
+  stroke-opacity: 0.7;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.gc-own {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The whole run, thin, under the parts that count. */
+.gc-own-all {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  stroke-linejoin: round;
+}
+
+.gc-key-skip {
+  color: var(--ink-muted);
+  border-top-width: 1px;
+  border-top-style: dashed;
+}
+
+.gc-arrow {
+  fill: var(--ink-muted);
+}
+
+.gc-hero {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  margin: 0;
+}
+
+.gc-hero-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.gc-hero-label {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.gc-best-line,
+.gc-note,
+.gc-gap {
+  margin: 0;
+}
+
+.gc-cue {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
+.gc-cue-label {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.gc-left {
+  fill: var(--grip);
+}
+
+.gc-hatch {
+  stroke: var(--ink-muted);
+  stroke-width: 1.2;
+}
+
+.gc-ramp {
+  background-image: linear-gradient(to right, transparent, var(--grip));
+}
+
+.gc-swatch-skip {
+  background: repeating-linear-gradient(45deg, var(--ink-muted) 0 1px, transparent 1px 4px);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.gc-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.gc-table th,
+.gc-table td {
+  padding: 0.2rem 0.9rem 0.2rem 0;
+  text-align: left;
+}
+
+.gc-table thead th {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.gc-table tbody th {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.gc-table tbody td {
+  font-weight: 600;
+}

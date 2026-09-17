@@ -1,6 +1,7 @@
 import type { FlagColour, GameState, PitMode, SessionState } from '../protocol/constants.ts';
 import type { ChassisEventKind, PhaseBalance, Wheel } from '../analysis/chassis.ts';
 import type { CoachTip } from '../analysis/coach.ts';
+import type { GripRun } from '../analysis/grip.ts';
 import type { Habit } from '../analysis/session.ts';
 
 export type Quad = [number, number, number, number];
@@ -203,6 +204,12 @@ export interface CornerProfile {
   bestBrakeAt: number | null;
 }
 
+/** Grip used through a corner, on the same points as its profile: this run and your best run. */
+export interface CornerGrip {
+  run: GripRun;
+  best: GripRun | null;
+}
+
 /** How the corner you just drove went, sent as soon as you pass its exit. */
 export interface CornerReport {
   lap: number;
@@ -226,6 +233,8 @@ export interface CornerReport {
   events: LiveEvent[];
   tip: CoachTip | null;
   profile: CornerProfile;
+  /** Null until a lap has shown how much grip the car has. */
+  grip: CornerGrip | null;
 }
 
 /** What to aim for in a corner: your best run, and anything to work on. */

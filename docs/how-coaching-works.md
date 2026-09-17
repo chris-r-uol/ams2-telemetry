@@ -92,6 +92,43 @@ Thresholds live in [`src/shared/analysis/coach.ts`](../src/shared/analysis/coach
   at the same corner. Fixing a habit is worth more than fixing a one-off.
 - **Consistency**: the standard deviation of clean lap times within 107% of your best.
 
+## 7. Grip used
+
+Coaches plot a **g-g diagram** (the friction circle): cornering g across, braking and
+accelerating g up and down. A driver using the whole tyre traces round the edge, braking
+into the turn and feeding in throttle out of it; gaps inside the edge are grip left unused.
+The **Last corner grip** card draws one for every corner you drive.
+
+The edge isn't a tyre model. It's the most grip you've shown this session, learned from
+your last six laps:
+
+- g is averaged over ±0.1 s first, taking out kerb and bump noise.
+- Laps are split into 36 km/h speed bands. In each band the limit for cornering, braking
+  and accelerating is the g you reach or beat 2% of the time (at least 2 s of driving).
+  Spins and contact are left out.
+- Downforce only adds grip as speed rises, so cornering and braking grip seen at one speed
+  is carried up to every faster band. A flat-out kink never asks for full grip, so it
+  can't lower the limit.
+- Between those directions, braking and turning at once is limited by the ellipse through
+  them, the usual tyre friction ellipse. Accelerating is limited by what the engine gave
+  at that speed.
+
+Everything on the card is a share of that limit at that moment's speed and direction, so
+100% is always the edge of the circle. Three things don't count towards grip used:
+
+| Not counted | Why |
+|---|---|
+| Flat out | the engine is the limit, not the tyres |
+| Changing direction | turning hard one way to hard the other within 1.5 s: grip has to pass through zero |
+| Contact or a spin | it says nothing about how you drive |
+
+The rest is split by what your feet were doing (braking, off the pedals, part throttle),
+weighted by time. **Most grip left** is the stretch below 85% that left the most grip
+unused (time × grip left), at least 0.4 s long. It's measured on your best run through the
+corner too, for comparison.
+
+The analysis lives in [`src/shared/analysis/grip.ts`](../src/shared/analysis/grip.ts).
+
 ## Limitations
 
 - Corners are numbered in the order they're detected (T1, T2, …), which may not match
@@ -99,3 +136,6 @@ Thresholds live in [`src/shared/analysis/coach.ts`](../src/shared/analysis/coach
 - Coaching is relative to you. It finds inconsistency and missed opportunities; it
   can't tell you that everyone else brakes 30 m later.
 - Car setup, fuel load and tyre wear change what's possible between laps.
+- Grip used is measured against your own best, so it can't show grip you've never used
+  anywhere at that speed. Early in a session the limit is still low, and runs can read
+  over 100%.
