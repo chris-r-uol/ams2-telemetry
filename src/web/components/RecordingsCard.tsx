@@ -1,20 +1,16 @@
 import { useId, useState } from 'react';
-import type { RecordingInfo, RecordingStatus } from '../../shared/model/types.ts';
-import { api, sendJson, useApi } from '../lib/api.ts';
+import type { RecordingInfo } from '../../shared/model/types.ts';
+import { api, sendJson } from '../lib/api.ts';
 import { useLive } from '../lib/live.ts';
+import { useRecordings, useStartReplay } from '../lib/replay.ts';
 import { formatSessionDate } from './laps.tsx';
 import { formatBytes, formatDuration, RecordButton } from './RecordButton.tsx';
 import { Card } from './ui.tsx';
 
-interface RecordingsDto {
-  active: RecordingStatus | null;
-  autoRecord: boolean;
-  recordings: RecordingInfo[];
-}
-
 export function RecordingsCard() {
-  const activeName = useLive((s) => s.status?.recording?.name ?? null);
-  const { data, error, reload } = useApi<RecordingsDto>(api.recordings(), activeName);
+  const { data, error, reload } = useRecordings();
+  const replaying = useLive((s) => s.status?.replay?.recording ?? null);
+  const replay = useStartReplay();
   const [actionError, setActionError] = useState<string | null>(null);
   const autoId = useId();
 
@@ -37,7 +33,7 @@ export function RecordingsCard() {
     <Card
       title="Raw telemetry recordings"
       id="recordings"
-      description="Every packet the game sent, exactly as it arrived. Replay one on any computer, or share it to get help with a problem."
+      description="Every packet the game sent, exactly as it arrived. Replay one here or on any computer, or share it to get help with a problem."
       actions={<RecordButton />}
     >
       <div className="setting">
@@ -60,9 +56,9 @@ export function RecordingsCard() {
         </label>
       </div>
 
-      {(actionError ?? error) && (
+      {(actionError ?? replay.error ?? error) && (
         <p className="error-text" role="alert">
-          {actionError ?? error}
+          {actionError ?? replay.error ?? error}
         </p>
       )}
 
@@ -103,6 +99,18 @@ export function RecordingsCard() {
                         </span>
                       ) : (
                         <span className="row-actions">
+                          {replaying === recording.name ? (
+                            <span className="badge badge-good">Replaying</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-small"
+                              disabled={replay.busy !== null}
+                              onClick={() => void replay.start(recording.name)}
+                            >
+                              Replay<span className="visually-hidden"> {title} recording</span>
+                            </button>
+                          )}
                           <a className="btn btn-small" href={api.recording(recording.name)} download>
                             Download<span className="visually-hidden"> {title} recording</span>
                           </a>
@@ -121,7 +129,8 @@ export function RecordingsCard() {
       )}
 
       <p className="setting-hint recording-hint">
-        Files are saved in the <code>recordings</code> folder. Replay one with{' '}
+        Files are saved in the <code>recordings</code> folder. A replay takes over the Live page until you stop it,
+        and its laps aren't saved again. To add a recording from another computer to your sessions, run{' '}
         <code>npm run replay -- recordings/&lt;file&gt;</code>.
       </p>
     </Card>

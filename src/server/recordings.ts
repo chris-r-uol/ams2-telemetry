@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { RecordingInfo, RecordingStatus } from '../shared/model/types.ts';
+import type { RecordingInfo, RecordingStatus, SessionMeta } from '../shared/model/types.ts';
 import { PacketRecorder } from './sources/recorder.ts';
 
 export const RECORDING_FILE = /^[A-Za-z0-9_.-]+\.ams2rec$/;
@@ -47,6 +47,30 @@ interface ActiveRecording {
   sessionId: string | null;
   track: string | null;
   car: string | null;
+}
+
+/** Letters and digits only, for comparing track names written different ways. */
+const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Fill in which saved session each recording captured. Recordings name their session;
+ * older ones without that are matched by track and by the session starting while
+ * the recording ran (or within two minutes of it starting, when its length isn't known).
+ */
+export function linkRecordings(recordings: RecordingInfo[], sessions: SessionMeta[]): RecordingInfo[] {
+  const known = new Set(sessions.map((s) => s.id));
+  return recordings.map((recording) => {
+    if (recording.sessionId && known.has(recording.sessionId)) return recording;
+    const margin = 120_000;
+    const end = recording.startedAt + (recording.durationMs ?? margin);
+    const match = sessions.find(
+      (s) =>
+        s.startedAt >= recording.startedAt - margin &&
+        s.startedAt <= end &&
+        (!recording.track || plain(recording.track) === plain(`${s.track.location}${s.track.variation}`)),
+    );
+    return { ...recording, sessionId: match?.id ?? null };
+  });
 }
 
 const slug = (text: string) =>
@@ -179,10 +203,13 @@ export class RecordingManager {
       // older or interrupted recording: fall back to file dates
     }
     const a = this.active?.name === name ? this.active : null;
+    // Names start with the UTC time recording began, which survives copying the file to another computer.
+    const stamp = name.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})_/);
+    const named = stamp ? Date.UTC(+stamp[1], +stamp[2] - 1, +stamp[3], +stamp[4], +stamp[5], +stamp[6]) : null;
     return {
       name,
       sizeBytes: stat.size,
-      startedAt: a?.startedAt ?? sidecar.startedAt ?? (stat.birthtimeMs || stat.mtimeMs),
+      startedAt: a?.startedAt ?? sidecar.startedAt ?? named ?? (stat.birthtimeMs || stat.mtimeMs),
       durationMs: a
         ? Date.now() - a.startedAt
         : sidecar.startedAt && sidecar.endedAt
@@ -192,6 +219,7 @@ export class RecordingManager {
       track: a?.track ?? sidecar.track ?? null,
       car: a?.car ?? sidecar.car ?? null,
       active: a !== null,
+      sessionId: a?.sessionId ?? sidecar.sessionId ?? null,
     };
   }
 

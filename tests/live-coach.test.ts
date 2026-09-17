@@ -60,6 +60,24 @@ describe('live coach on the demo car', () => {
     expect([...last.profile.throttle, ...last.profile.brake].every((v) => v === null || (v >= 0 && v <= 1))).toBe(true);
   });
 
+  it('reads brake and throttle technique through the corner, and how much of the lap was flat out', () => {
+    const last = insights.lastCorner!;
+    expect(last.profile.bestThrottle).toHaveLength(last.profile.speed.length);
+    expect(last.pedals.best).not.toBeNull();
+    const withBraking = reports.filter((r) => r.pedals.run.brake !== null);
+    expect(withBraking.length).toBeGreaterThan(0);
+    for (const r of withBraking) {
+      const b = r.pedals.run.brake!;
+      expect(b.peak).toBeGreaterThan(0.1);
+      expect(b.toPeak).toBeGreaterThanOrEqual(0);
+      expect(b.off).toBeGreaterThan(b.start);
+    }
+    expect(reports.some((r) => r.pedals.run.throttle.toFull !== null)).toBe(true);
+    expect(insights.lapPedals?.lap).toBe(4);
+    expect(insights.lapPedals?.fullThrottle).toBeGreaterThan(0.2);
+    expect(insights.lapPedals?.fullThrottle).toBeLessThan(1);
+  });
+
   it('measures grip used through the corner, for this run and the best run', () => {
     const grip = insights.lastCorner!.grip!;
     expect(grip).not.toBeNull();

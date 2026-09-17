@@ -8,6 +8,7 @@ import {
   bodySlipAngle,
   calibrate,
   incidentMask,
+  incidentRanges,
   neutralSteering,
   type ChannelAvailability,
   type ChassisCalibration,
@@ -15,16 +16,17 @@ import {
 } from '../shared/analysis/chassis.ts';
 import { tipsForCorner } from '../shared/analysis/coach.ts';
 import type { Corner } from '../shared/analysis/corners.ts';
-import { gripEnvelope, gripRun, type GripEnvelope, type GripRun, type GripSamples } from '../shared/analysis/grip.ts';
+import { CORNER_STEP, cornerGripRun, cornerStart, gripEnvelope, type GripEnvelope } from '../shared/analysis/grip.ts';
+import { cornerPedals, fullThrottleShare } from '../shared/analysis/pedals.ts';
 import { cornerMetrics } from '../shared/analysis/metrics.ts';
 import { lapLength, resampleByDistance, valueAt, type ResampledLap } from '../shared/analysis/resample.ts';
 import { coachableLaps, type AnalysedLap } from '../shared/analysis/session.ts';
 import type {
-  CornerGrip,
   CornerPlan,
   CornerProfile,
   CornerReport,
   LapFeedback,
+  LapPedals,
   LapSummary,
   LapTrace,
   LiveCoachFrame,
@@ -41,7 +43,8 @@ const CALIBRATION_LAPS = 6;
 const BALANCE_SMOOTHING = 0.15;
 /** Ticks without cornering before the balance reading clears. */
 const STRAIGHT_TICKS = 20;
-const PROFILE_STEP = 2;
+/** Profiles line up point for point with grip runs. */
+const PROFILE_STEP = CORNER_STEP;
 
 export class LiveCoach {
   private readonly manager: SessionManager;
@@ -59,6 +62,7 @@ export class LiveCoach {
   private lastCorner: CornerReport | null = null;
   private plans: CornerPlan[] = [];
   private idealLapTime: number | null = null;
+  private lapPedals: LapPedals | null = null;
   private balance: number | null = null;
   private straightTicks = 0;
 
@@ -68,6 +72,7 @@ export class LiveCoach {
     manager.onSession((session) => {
       if (session.id !== this.sessionId) this.resetSession(session.id);
     });
+    manager.onReset(() => this.resetSession(null));
     manager.onTickProcessed((tick) => this.handleTick(tick));
     manager.onLap((summary, feedback, trace) => this.handleLap(summary, feedback, trace));
   }
@@ -93,6 +98,7 @@ export class LiveCoach {
       events: this.events,
       plans: this.plans,
       idealLapTime: this.idealLapTime,
+      lapPedals: this.lapPedals,
     };
   }
 
@@ -116,7 +122,7 @@ export class LiveCoach {
     };
   }
 
-  private resetSession(sessionId: string): void {
+  private resetSession(sessionId: string | null): void {
     this.sessionId = sessionId;
     this.recentLaps = [];
     this.calibration = null;
@@ -129,6 +135,7 @@ export class LiveCoach {
     this.lastCorner = null;
     this.plans = [];
     this.idealLapTime = null;
+    this.lapPedals = null;
     this.balance = null;
     this.emit();
   }
@@ -168,6 +175,19 @@ export class LiveCoach {
     }
 
     if (summary.kind !== 'partial') {
+      const lap = this.manager.analysedLaps.find((l) => l.summary.lap === summary.lap);
+      const best = coachableLaps(this.manager.analysedLaps).reduce<AnalysedLap | null>(
+        (fastest, l) => (!fastest || l.summary.lapTime! < fastest.summary.lapTime! ? l : fastest),
+        null,
+      );
+      this.lapPedals = lap
+        ? {
+            lap: summary.lap,
+            fullThrottle: fullThrottleShare(lap.resampled),
+            bestLap: best?.summary.lap ?? null,
+            bestFullThrottle: best ? fullThrottleShare(best.resampled) : null,
+          }
+        : null;
       this.recentLaps = [...this.recentLaps, { summary, trace }].slice(-CALIBRATION_LAPS);
       this.calibration = calibrate(this.recentLaps);
       const { impactG, velocityAxesSwapped } = this.calibration.calibration;
@@ -202,15 +222,7 @@ export class LiveCoach {
   private incidentsIn(trace: LapTrace): [number, number][] {
     if (!this.calibration) return [];
     const { impactG, velocityAxesSwapped } = this.calibration.calibration;
-    const mask = incidentMask(trace, impactG, velocityAxesSwapped);
-    const ranges: [number, number][] = [];
-    for (let i = 0; i < mask.length; i++) {
-      if (!mask[i]) continue;
-      const last = ranges.at(-1);
-      if (last && mask[i - 1]) last[1] = Math.max(last[1], trace.d[i]);
-      else ranges.push([trace.d[i], trace.d[i]]);
-    }
-    return ranges;
+    return incidentRanges(trace, impactG, velocityAxesSwapped);
   }
 
   /** Your fastest run through a corner this session, from braking zone to exit. */
@@ -269,7 +281,16 @@ export class LiveCoach {
       events,
       tip: tip ?? null,
       profile: profileFor(corner, run, best?.lap.resampled ?? null, chassis, metrics.brakePoint, bestMetrics?.brakePoint ?? null),
-      grip: this.grip ? cornerGrip(this.grip, corner, run, best?.lap.resampled ?? null, this.incidentsIn(trace)) : null,
+      grip: this.grip
+        ? {
+            run: cornerGripRun(this.grip, corner, run, this.incidentsIn(trace)),
+            best: best ? cornerGripRun(this.grip, corner, best.lap.resampled) : null,
+          }
+        : null,
+      pedals: {
+        run: cornerPedals(run, corner, cornerStart(corner)),
+        best: best ? cornerPedals(best.lap.resampled, corner, cornerStart(corner)) : null,
+      },
     };
 
     if (current) {
@@ -315,33 +336,6 @@ function through(lap: ResampledLap, corner: Corner): number {
   return valueAt(lap, 't', corner.exit) - valueAt(lap, 't', corner.entry);
 }
 
-/** Profiles start a little before the braking zone. */
-function profileStart(corner: Corner): number {
-  return Math.max(0, corner.entry - 40);
-}
-
-/** Grip used through a corner, on the profile's points. */
-function cornerGrip(
-  envelope: GripEnvelope,
-  corner: Corner,
-  run: ResampledLap,
-  best: ResampledLap | null,
-  incidents: [number, number][],
-): CornerGrip {
-  const along = (lap: ResampledLap, excluded: [number, number][]): GripRun => {
-    const samples: GripSamples = { d: [], t: [], speed: [], throttle: [], brake: [], latG: [], lonG: [] };
-    for (let d = profileStart(corner); d <= corner.exit; d += PROFILE_STEP) {
-      samples.d.push(d);
-      for (const channel of ['t', 'speed', 'throttle', 'brake', 'latG', 'lonG'] as const) {
-        samples[channel].push(valueAt(lap, channel, d));
-      }
-    }
-    const near = samples.d.map((d) => excluded.some(([from, to]) => d >= from - PROFILE_STEP && d <= to + PROFILE_STEP));
-    return gripRun(envelope, samples, near);
-  };
-  return { run: along(run, incidents), best: best ? along(best, []) : null };
-}
-
 function profileFor(
   corner: Corner,
   run: ResampledLap,
@@ -350,12 +344,14 @@ function profileFor(
   brakeAt: number | null,
   bestBrakeAt: number | null,
 ): CornerProfile {
-  const from = profileStart(corner);
+  const from = cornerStart(corner);
   const speed: (number | null)[] = [];
   const bestSpeed: (number | null)[] = [];
   const balance: (number | null)[] = [];
   const throttle: (number | null)[] = [];
   const brake: (number | null)[] = [];
+  const bestThrottle: (number | null)[] = [];
+  const bestBrake: (number | null)[] = [];
   const steering: (number | null)[] = [];
   const bestSteering: (number | null)[] = [];
   const x: (number | null)[] = [];
@@ -368,8 +364,10 @@ function profileFor(
   for (let d = from; d <= corner.exit; d += PROFILE_STEP) {
     speed.push(valueAt(run, 'speed', d));
     bestSpeed.push(best ? valueAt(best, 'speed', d) : null);
-    throttle.push(pedal(valueAt(run, 'throttle', d)));
+    throttle.push(pedal(valueAt(run, 'throttleIn', d)));
     brake.push(pedal(valueAt(run, 'brake', d)));
+    bestThrottle.push(best ? pedal(valueAt(best, 'throttleIn', d)) : null);
+    bestBrake.push(best ? pedal(valueAt(best, 'brake', d)) : null);
     steering.push(finite(valueAt(run, 'steering', d)));
     bestSteering.push(best ? finite(valueAt(best, 'steering', d)) : null);
     x.push(finite(valueAt(run, 'x', d)));
@@ -392,6 +390,8 @@ function profileFor(
     balance,
     throttle,
     brake,
+    bestThrottle,
+    bestBrake,
     steering,
     bestSteering,
     x,

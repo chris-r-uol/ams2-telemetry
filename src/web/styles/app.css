@@ -2139,10 +2139,15 @@ code {
 
 .playback-speed {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.8125rem;
   color: var(--ink-2);
+}
+
+.playback-pause {
+  min-width: 5.5rem;
 }
 
 .segmented button:disabled,
@@ -2223,6 +2228,13 @@ code {
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
+}
+
+@media (min-width: 900px) {
+  /* Cells have a fixed height here: charts that can shrink read this and fit instead of scrolling. */
+  .preset-slot > .live-card {
+    --fit-height: 1;
+  }
 }
 
 .preset-grid.is-editing .preset-slot > .live-card {
@@ -2462,10 +2474,58 @@ code {
 }
 
 @container (min-width: 24rem) {
+  /* The circle sizes itself to its column, so the column needs a width of its own. */
   .gc-split {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     align-items: center;
   }
+}
+
+/* The circle takes whatever height the card has left; everything else keeps its natural size. */
+.grip-card .gc-split,
+.grip-card .gc-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.grip-card .gc-split {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+@container (min-width: 24rem) {
+  .grip-card .gc-split {
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .grip-card .gc-side {
+    align-self: center;
+  }
+}
+
+@container (min-width: 44rem) {
+  .grip-card .gc-detail {
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+.gc-circle-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.grip-card .grip-circle {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.grip-card .grip-circle > div {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .gc-side {
@@ -2625,3 +2685,132 @@ code {
 .gc-table tbody td {
   font-weight: 600;
 }
+
+/* Car setup page */
+
+.grip-setup {
+  display: grid;
+  gap: 1rem;
+  container-type: inline-size;
+}
+
+.grip-corner-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.grip-corner-picker .segmented {
+  flex-wrap: wrap;
+}
+
+
+/* A button that reads as a link, for choosing a row. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+/* ============ Track map card ============ */
+
+.tm-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tm-key-slower {
+  color: var(--bad);
+}
+
+@media (min-width: 900px) {
+  /* In a grid cell the map fills the space left, however the cell is shaped. */
+  .preset-slot > .map-live-card .track-map {
+    height: 100%;
+    max-height: none;
+  }
+}
+
+/* ============ Brake and throttle card ============ */
+
+.pc-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.pc-table th,
+.pc-table td {
+  padding: 0.15rem 0.9rem 0.15rem 0;
+  text-align: left;
+}
+
+.pc-table thead th {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.pc-table tbody th {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.pc-table tbody td {
+  font-weight: 600;
+}
+
+.pc-table .pc-group th {
+  padding-top: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pc-note,
+.pc-lap {
+  margin: 0;
+}
+
+.pc-note {
+  font-weight: 600;
+}
+
+/* ============ Car setup: handling, gearing, track use ============ */
+
+.setup-subhead {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.handling-corners {
+  font-weight: 400;
+}
+
+.handling-grid .handling-total th,
+.handling-grid .handling-total td {
+  border-top: 1px solid var(--border-strong);
+}
+
+.plain-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.track-use-cell {
+  display: grid;
+  gap: 0.1rem;
+  font-size: 0.875rem;
+}
+

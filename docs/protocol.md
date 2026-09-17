@@ -90,7 +90,9 @@ repeat:
   bytes   the UDP payload, unmodified
 ```
 
-Replay with `npm run replay -- recordings/<file>.ams2rec` (add `--speed 4` or `--loop`).
+Replay from the Sessions page (the replay takes over the Live page and isn't saved), or with
+`npm run replay -- recordings/<file>.ams2rec` (add `--speed 4` or `--loop`), which saves the
+replayed laps as a session.
 
 ## Sources
 

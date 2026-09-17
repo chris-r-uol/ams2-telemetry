@@ -158,6 +158,21 @@ export const OFF_TRACK_TERRAIN = new Set<number>([
   43, // rough sand heavy
 ]);
 
+/**
+ * Kerbs, rumble strips and the painted run-off just beyond them: where a wheel on
+ * one of these is at the edge of the track. Same enum as OFF_TRACK_TERRAIN.
+ */
+export const KERB_TERRAIN = new Set<number>([
+  10, // rumble strips
+  11, // drains
+  25, // exit rumble strips
+  32, // astroturf
+  40, // rumbles
+  41, // rumbles
+  46, // run-off road
+  47, // illegal strip
+]);
+
 export function enumName<T extends readonly string[]>(names: T, index: number): T[number] {
   return names[index] ?? names[0];
 }

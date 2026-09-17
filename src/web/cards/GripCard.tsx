@@ -2,12 +2,12 @@
  * Grip used through the corner you just drove: the g-g diagram (friction circle)
  * coaches draw, scaled so the circle is the most grip you've shown at each speed.
  * A trace that runs round the circle is using the car; where it cuts inside, grip
- * was left unused.
+ * was left unused. The parts are shared with the Car setup page.
  */
-import { useId, useRef } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import type { GripGap, GripPhase, GripRun } from '../../shared/analysis/grip.ts';
-import type { CornerProfile } from '../../shared/model/types.ts';
 import { useLive } from '../lib/live.ts';
+import { fitsHeight, useElementSize } from '../lib/useElementSize.ts';
 import { useElementWidth } from '../lib/useElementWidth.ts';
 import { LiveCard, type CardSize } from './parts.tsx';
 
@@ -16,7 +16,7 @@ const FULL_GAP = 0.4;
 /** Points beyond the limit are drawn no further out than this. */
 const EXTENT = 1.25;
 
-const percent = (share: number | null | undefined) =>
+export const percent = (share: number | null | undefined) =>
   share === null || share === undefined ? '–' : `${Math.round(share * 100)}%`;
 
 const PHASE_WORDS: Record<GripGap['phase'], string> = {
@@ -33,9 +33,28 @@ function where(from: number, to: number, apex: number): string {
   return `from ${Math.abs(a)} m before to ${b} m after the apex`;
 }
 
-function describeGap(gap: GripGap, apex: number): string {
+/** "Off the pedals, 60–20 m before the apex". */
+export function describeGap(gap: Pick<GripGap, 'phase' | 'from' | 'to'>, apex: number): string {
   const words = PHASE_WORDS[gap.phase];
   return `${words[0].toUpperCase()}${words.slice(1)}, ${where(gap.from, gap.to, apex)}`;
+}
+
+/** Where a run's points sit along the track: one every `step` metres from `from`. */
+export interface GripSpan {
+  apex: number;
+  from: number;
+  step: number;
+}
+
+function describeRun(corner: string, run: GripRun, best: GripRun | null, apex: number): string {
+  const gap = run.summary.gap;
+  return (
+    `Grip used through ${corner}: ${percent(run.summary.use)} of the most you've shown` +
+    (best ? `, against ${percent(best.summary.use)} on your best run.` : '.') +
+    (gap
+      ? ` Most grip left ${describeGap(gap, apex).toLowerCase()}, ${percent(gap.use)} for ${gap.seconds.toFixed(1)} s.`
+      : '')
+  );
 }
 
 export function CornerGripCard({ size }: { size: CardSize }) {
@@ -59,19 +78,15 @@ export function CornerGripCard({ size }: { size: CardSize }) {
   }
 
   const { run, best } = report.grip;
-  const profile = report.profile;
+  const { apex, from, step } = report.profile;
   const bestLabel = report.bestLap !== null ? `Best run, lap ${report.bestLap}` : 'Best run';
   const gap = run.summary.gap;
-  const summary =
-    `Grip used through ${report.corner}: ${percent(run.summary.use)} of the most you've shown` +
-    (best ? `, against ${percent(best.summary.use)} on your best run.` : '.') +
-    (gap ? ` Most grip left ${describeGap(gap, profile.apex).toLowerCase()}, ${percent(gap.use)} for ${gap.seconds.toFixed(1)} s.` : '');
 
   if (size === 'glance') {
     return (
-      <LiveCard title={title} size={size} meta={report.corner}>
+      <LiveCard title={title} size={size} meta={report.corner} className="grip-card">
         <div className="gc-split">
-          <GripCircle run={run} best={best} summary={summary} maxSize={200} />
+          <GripCircle run={run} best={best} summary={describeRun(report.corner, run, best, apex)} maxSize={200} />
           <div className="gc-side">
             <p className="gc-hero">
               <span className="gc-hero-value tabular">{percent(run.summary.use)}</span>
@@ -81,18 +96,61 @@ export function CornerGripCard({ size }: { size: CardSize }) {
             {gap ? (
               <p className="gc-cue">
                 <span className="gc-cue-label">Most grip left</span>
-                {describeGap(gap, profile.apex)}
+                {describeGap(gap, apex)}
               </p>
             ) : (
               <p className="muted">No big gaps.</p>
             )}
           </div>
         </div>
-        <GripLegend best={best !== null} bestLabel={bestLabel} />
+        <GripRugs run={run} best={best} runLabel="You" span={{ apex, from, step }} legend={false} />
+        <GripLegend runLabel="This run" bestLabel={best ? bestLabel : null} rugs />
       </LiveCard>
     );
   }
 
+  return (
+    <LiveCard title={title} size={size} meta={`${report.corner} · lap ${report.lap}`} className="grip-card">
+      <GripDetail
+        corner={report.corner}
+        run={run}
+        best={best}
+        runLabel="You"
+        legendLabel="This run"
+        bestLabel={bestLabel}
+        span={{ apex, from, step }}
+      >
+        <p className="muted cl-hint">
+          The circle is the most grip you've shown at each speed this session, braking, turning or both at once. Flat
+          out and swinging from one direction to the other don't count: the engine is the limit there, and grip has to
+          pass through zero.
+        </p>
+      </GripDetail>
+    </LiveCard>
+  );
+}
+
+/** One run through a corner in full: the circle, where grip was left along the corner, and grip used by phase. */
+export function GripDetail({
+  corner,
+  run,
+  best,
+  runLabel,
+  legendLabel,
+  bestLabel,
+  span,
+  children,
+}: {
+  corner: string;
+  run: GripRun;
+  best: GripRun | null;
+  /** Short name for the run in the strips and table, such as "You" or "Lap 7". */
+  runLabel: string;
+  legendLabel: string;
+  bestLabel: string;
+  span: GripSpan;
+  children?: ReactNode;
+}) {
   const rows: [string, (s: GripRun['summary']) => GripPhase | { use: number | null; seconds: null }][] = [
     ['Whole corner', (s) => ({ use: s.use, seconds: null })],
     ['Braking', (s) => s.braking],
@@ -103,72 +161,79 @@ export function CornerGripCard({ size }: { size: CardSize }) {
     phase.use === null || (phase.seconds !== null && phase.seconds < 0.05)
       ? '–'
       : `${percent(phase.use)}${phase.seconds !== null ? ` · ${phase.seconds.toFixed(1)} s` : ''}`;
+  const gap = run.summary.gap;
   const contact = run.skip.some((s) => s === 'incident');
 
   return (
-    <LiveCard title={title} size={size} meta={`${report.corner} · lap ${report.lap}`}>
-      <div className="cl-split">
-        <div>
-          <GripCircle run={run} best={best} summary={summary} maxSize={320} />
-          <GripLegend best={best !== null} bestLabel={bestLabel} />
-        </div>
-        <div className="cl-side">
-          <GripRugs run={run} best={best} profile={profile} />
-          <table className="gc-table">
-            <caption className="visually-hidden">Grip used in each part of the corner, and for how long</caption>
-            <thead>
-              <tr>
-                <td />
-                <th scope="col">You</th>
-                {best && <th scope="col">{bestLabel}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([label, pick]) => (
-                <tr key={label}>
-                  <th scope="row">{label}</th>
-                  <td className="tabular">{cell(pick(run.summary))}</td>
-                  {best && <td className="tabular">{cell(pick(best.summary))}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {gap && (
-            <p className="gc-gap">
-              <strong>Most grip left:</strong> {describeGap(gap, profile.apex).toLowerCase()}, using {percent(gap.use)} for{' '}
-              {gap.seconds.toFixed(1)} s.
-            </p>
-          )}
-          {contact && <p className="muted gc-note">Contact or a spin here isn't counted.</p>}
-          <p className="muted cl-hint">
-            The circle is the most grip you've shown at each speed this session, braking, turning or both at once.
-            Flat out and swinging from one direction to the other don't count: the engine is the limit there, and grip
-            has to pass through zero.
-          </p>
-        </div>
+    <div className="cl-split gc-detail">
+      <div className="gc-circle-column">
+        <GripCircle run={run} best={best} summary={describeRun(corner, run, best, span.apex)} maxSize={320} />
+        <GripLegend runLabel={legendLabel} bestLabel={best ? bestLabel : null} />
       </div>
-    </LiveCard>
+      <div className="cl-side">
+        <GripRugs run={run} best={best} runLabel={runLabel} span={span} />
+        <table className="gc-table">
+          <caption className="visually-hidden">Grip used in each part of {corner}, and for how long</caption>
+          <thead>
+            <tr>
+              <td />
+              <th scope="col">{runLabel}</th>
+              {best && <th scope="col">{bestLabel}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([label, pick]) => (
+              <tr key={label}>
+                <th scope="row">{label}</th>
+                <td className="tabular">{cell(pick(run.summary))}</td>
+                {best && <td className="tabular">{cell(pick(best.summary))}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {gap && (
+          <p className="gc-gap">
+            <strong>Most grip left:</strong> {describeGap(gap, span.apex).toLowerCase()}, using {percent(gap.use)} for{' '}
+            {gap.seconds.toFixed(1)} s.
+          </p>
+        )}
+        {contact && <p className="muted gc-note">Contact or a spin here isn't counted.</p>}
+        {children}
+      </div>
+    </div>
   );
 }
 
-function GripLegend({ best, bestLabel }: { best: boolean; bestLabel: string }) {
+/** `rugs` adds the strips' colour scale, for cards that show the strips without their own legend. */
+function GripLegend({ runLabel, bestLabel, rugs = false }: { runLabel: string; bestLabel: string | null; rugs?: boolean }) {
   return (
     <p className="cp-legend">
       <span className="legend-item">
         <span className="key key-own" aria-hidden="true" />
-        This run
+        {runLabel}
       </span>
-      {best && (
+      {bestLabel && (
         <span className="legend-item">
           <span className="key key-reference" aria-hidden="true" />
           {bestLabel}
         </span>
       )}
+      {rugs && <GripRamp />}
       <span className="legend-item">
         <span className="key gc-key-skip" aria-hidden="true" />
+        {rugs && <span className="swatch gc-swatch-skip" aria-hidden="true" />}
         Not counted
       </span>
     </p>
+  );
+}
+
+function GripRamp() {
+  return (
+    <span className="legend-item">
+      Grip left <span className="ramp-label">none</span>{' '}
+      <span className="ramp gc-ramp" aria-hidden="true" /> <span className="ramp-label">{percent(FULL_GAP)}+</span>
+    </span>
   );
 }
 
@@ -185,12 +250,14 @@ function GripCircle({
   maxSize: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const width = useElementWidth(ref);
+  const { width, height } = useElementSize(ref);
   const arrowId = `gc-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   const padX = 40;
   const padY = 18;
-  const plot = Math.max(0, Math.min(maxSize, width - padX * 2));
+  // In a Live grid cell the circle shrinks to the height left over, so the card doesn't scroll.
+  const tallest = fitsHeight(ref.current) ? Math.max(120, height - padY * 2) : Infinity;
+  const plot = Math.max(0, Math.min(maxSize, width - padX * 2, tallest));
   const radius = plot / 2 / EXTENT;
   const cx = padX + plot / 2;
   const cy = padY + plot / 2;
@@ -262,18 +329,30 @@ function GripCircle({
   );
 }
 
-/** Where along the corner grip was left, you above your best run. */
-function GripRugs({ run, best, profile }: { run: GripRun; best: GripRun | null; profile: CornerProfile }) {
+/** Where along the corner grip was left, this run above your best run. */
+function GripRugs({
+  run,
+  best,
+  runLabel,
+  span,
+  legend = true,
+}: {
+  run: GripRun;
+  best: GripRun | null;
+  runLabel: string;
+  span: GripSpan;
+  legend?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const width = useElementWidth(ref);
   const hatchId = `gc-hatch-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const rows = [
-    { label: 'You', run },
+    { label: runLabel, run },
     ...(best ? [{ label: 'Best', run: best }] : []),
   ];
 
   const n = Math.max(...rows.map((row) => row.run.use.length));
-  const labelWidth = 44;
+  const labelWidth = 52;
   const bandHeight = 16;
   const gap = 6;
   const plotWidth = Math.max(10, width - labelWidth - 4);
@@ -282,7 +361,7 @@ function GripRugs({ run, best, profile }: { run: GripRun; best: GripRun | null; 
   const rowTop = (row: number) => row * (bandHeight + gap);
   const bottom = rowTop(rows.length) - gap;
   const height = bottom + 20;
-  const apexX = x((profile.apex - profile.from) / profile.step);
+  const apexX = x((span.apex - span.from) / span.step);
   const summary = `Grip left along the corner: ${rows
     .map((row) => `${row.label}, ${percent(row.run.summary.use)} used overall`)
     .join('; ')}.`;
@@ -326,16 +405,15 @@ function GripRugs({ run, best, profile }: { run: GripRun; best: GripRun | null; 
           </svg>
         )}
       </div>
-      <figcaption className="cp-legend">
-        <span className="legend-item">
-          Grip left <span className="ramp-label">none</span>{' '}
-          <span className="ramp gc-ramp" aria-hidden="true" /> <span className="ramp-label">{percent(FULL_GAP)}+</span>
-        </span>
-        <span className="legend-item">
-          <span className="swatch gc-swatch-skip" aria-hidden="true" />
-          Not counted
-        </span>
-      </figcaption>
+      {legend && (
+        <figcaption className="cp-legend">
+          <GripRamp />
+          <span className="legend-item">
+            <span className="swatch gc-swatch-skip" aria-hidden="true" />
+            Not counted
+          </span>
+        </figcaption>
+      )}
     </figure>
   );
 }

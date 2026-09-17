@@ -15,13 +15,14 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { ViteDevServer } from 'vite';
-import { PLAYBACK_SPEEDS, type SourceKind, type SourceStatus } from '../shared/model/types.ts';
+import type { SourceKind, SourceStatus } from '../shared/model/types.ts';
 import { DEFAULT_UDP_PORT } from '../shared/protocol/constants.ts';
 import { AnalysisService } from './analysis-service.ts';
 import { DemoSimulator } from './demo/simulator.ts';
 import { createRequestHandler } from './http.ts';
 import { LiveCoach } from './live-coach.ts';
 import { attachLiveSocket } from './live-socket.ts';
+import { Playback } from './playback.ts';
 import { RecordingManager } from './recordings.ts';
 import { SessionManager } from './session-manager.ts';
 import { startReplay } from './sources/replay.ts';
@@ -94,7 +95,7 @@ const source = values.source as SourceKind;
 if (!['udp', 'demo', 'replay'].includes(source)) fail(`Unknown source "${values.source}". Use udp, demo or replay.`);
 const port = Number(values.port);
 const udpPort = Number(values['udp-port']);
-let playbackSpeed = Math.max(0.1, Number(values.speed) || 1);
+const playbackSpeed = Math.max(0.1, Number(values.speed) || 1);
 const frameRate = Math.min(60, Math.max(1, Number(values.rate) || 20));
 const dataDir = resolve(values.data!);
 
@@ -115,23 +116,21 @@ const recordings = new RecordingManager({
     sessionId: manager.session?.id ?? null,
   }),
 });
+const playback = new Playback({ source, speed: playbackSpeed, hub, manager, store, analysis, recordings });
+
 if (values.record) recordings.start();
 // Re-recording a replay would only duplicate the file you're playing.
-if (source !== 'replay') manager.onSession((session) => void recordings.sessionChanged(session.id));
+if (source !== 'replay') {
+  manager.onSession((session) => {
+    if (!playback.replaying) void recordings.sessionChanged(session.id);
+  });
+}
 setInterval(() => recordings.idleCheck(), 5000).unref();
 
-const ingest = (bytes: Uint8Array, at: number = Date.now()) => {
-  recordings.write(bytes, at);
-  hub.ingest(bytes, at);
-};
-
-let sourceDetail = () => '';
-let stopSource = () => {};
-let setSourceSpeed: ((speed: number) => void) | null = null;
+const ingest = (bytes: Uint8Array, at: number = Date.now()) => playback.ingest(bytes, at);
 
 switch (source) {
   case 'udp': {
-    sourceDetail = () => `Listening for Automobilista 2 on UDP port ${udpPort}`;
     const udp = startUdpSource({
       port: udpPort,
       onPacket: ingest,
@@ -142,7 +141,8 @@ switch (source) {
         console.error('UDP error:', error.message);
       },
     });
-    stopSource = udp.close;
+    // The game keeps sending while a replay plays; its packets are ignored until the replay stops.
+    playback.setBase({ detail: () => `Listening for Automobilista 2 on UDP port ${udpPort}`, close: udp.close });
     break;
   }
   case 'demo': {
@@ -153,15 +153,17 @@ switch (source) {
       demo.runLaps(prefill);
     }
     demo.start();
-    sourceDetail = () => `Demo driver at ${demo.track.location} (${playbackSpeed}× speed)`;
-    stopSource = () => demo.stop();
-    setSourceSpeed = (next) => demo.setSpeed(next);
+    playback.setBase({
+      detail: () => `Demo driver at ${demo.track.location} (${playback.currentSpeed}× speed)`,
+      setSpeed: (next) => demo.setSpeed(next),
+      setPaused: (paused) => (paused ? demo.stop() : demo.start()),
+      close: () => demo.stop(),
+    });
     break;
   }
   case 'replay': {
     const file = values.file ?? fail('Replay needs a recording: npm run replay -- recordings/your-file.ams2rec');
     if (!existsSync(file)) fail(`Recording not found: ${file}`);
-    sourceDetail = () => `Replaying ${file} (${playbackSpeed}× speed${values.loop ? ', looping' : ''})`;
     const replay = startReplay({
       file,
       speed: playbackSpeed,
@@ -170,27 +172,18 @@ switch (source) {
       onEnd: () => console.log('  Replay finished. The dashboard stays up so you can review the laps.'),
       onError: (error) => console.error('Replay error:', error.message),
     });
-    stopSource = replay.close;
-    setSourceSpeed = replay.setSpeed;
+    playback.setBase({
+      detail: () => `Replaying ${file} (${playback.currentSpeed}× speed${values.loop ? ', looping' : ''})`,
+      setSpeed: replay.setSpeed,
+      setPaused: replay.setPaused,
+      close: replay.close,
+    });
     break;
   }
 }
 
-// The demo and replays can run faster or slower from the dashboard. The game can't.
-const applySpeed = setSourceSpeed;
-const changeSpeed = applySpeed
-  ? (next: number): boolean => {
-      if (!(PLAYBACK_SPEEDS as readonly number[]).includes(next)) return false;
-      playbackSpeed = next;
-      applySpeed(next);
-      return true;
-    }
-  : undefined;
-
 const status = (): SourceStatus => ({
-  source,
-  detail: sourceDetail(),
-  playbackSpeed: changeSpeed ? playbackSpeed : null,
+  ...playback.status(),
   packetsPerSecond: hub.packetsPerSecond,
   packetCounts: hub.packetCounts,
   lastPacketAt: hub.lastPacketAt,
@@ -221,12 +214,13 @@ server.on(
     recordings,
     status,
     version,
-    setPlaybackSpeed: changeSpeed,
+    playback,
     staticDir: join(ROOT, 'dist', 'web'),
     vite,
   }),
 );
 const live = attachLiveSocket(server, { manager, hub, coach, status, version, frameRate });
+playback.onChange(() => live.resync());
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') fail(`Port ${port} is already in use. Try: npm start -- --port ${port + 1}`);
@@ -241,7 +235,7 @@ server.listen(port, values.host, () => {
       if (address && address.family === 'IPv4' && !address.internal) lines.push(`              http://${address.address}:${port}`);
     }
   }
-  lines.push(`  Source      ${sourceDetail()}`);
+  lines.push(`  Source      ${playback.status().detail}`);
   lines.push(`  Sessions    ${store.root}`);
   lines.push(`  Recordings  ${recordings.dir}${recordings.status ? ' (recording now)' : recordings.autoRecord ? ' (recording every session)' : ''}`);
   if (source === 'udp') {
@@ -267,7 +261,7 @@ async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log('\n  Stopping…');
-  stopSource();
+  playback.close();
   live.close();
   server.close();
   const saved = await recordings.stop();

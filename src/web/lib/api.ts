@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChassisAnalysis } from '../../shared/analysis/chassis.ts';
 import type { CoachTip, LapComparison } from '../../shared/analysis/coach.ts';
 import type { Corner } from '../../shared/analysis/corners.ts';
+import type { CornerGripSummary, GripEnvelope, GripRun } from '../../shared/analysis/grip.ts';
 import type { ResampledLap } from '../../shared/analysis/resample.ts';
 import type { SessionInsights } from '../../shared/analysis/session.ts';
 import type { LapSummary, SessionMeta, SourceStatus } from '../../shared/model/types.ts';
@@ -26,6 +27,26 @@ export interface CompareDto {
 export interface ChassisDto {
   analysis: ChassisAnalysis;
   corners: Corner[];
+}
+
+export interface GripDto {
+  envelope: GripEnvelope | null;
+  lapsAnalysed: number;
+  corners: CornerGripSummary[];
+}
+
+export interface GripLapDto {
+  lap: number;
+  corners: {
+    cornerId: number;
+    corner: string;
+    apex: number;
+    from: number;
+    step: number;
+    bestLap: number | null;
+    run: GripRun;
+    best: GripRun | null;
+  }[];
 }
 
 export interface LiveReferenceDto {
@@ -55,8 +76,14 @@ export const api = {
   recordingSettings: () => '/api/recordings/settings',
   sessionCar: (id: string) => `/api/sessions/${encodeURIComponent(id)}/car`,
   sourceSpeed: () => '/api/source/speed',
+  sourcePause: () => '/api/source/pause',
+  replay: () => '/api/replay',
   chassis: (id: string) => `/api/sessions/${encodeURIComponent(id)}/chassis`,
   chassisLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/chassis/laps/${lap}`,
+  grip: (id: string) => `/api/sessions/${encodeURIComponent(id)}/grip`,
+  gearing: (id: string) => `/api/sessions/${encodeURIComponent(id)}/gearing`,
+  trackUse: (id: string) => `/api/sessions/${encodeURIComponent(id)}/track-use`,
+  gripLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/grip/laps/${lap}`,
 };
 
 export async function getJson<T>(path: string, init?: RequestInit): Promise<T> {

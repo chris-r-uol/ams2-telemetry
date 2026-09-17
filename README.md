@@ -36,8 +36,9 @@ lost time, and exactly what to try on the next one.
   lock-ups, wheelspin, suspension travel, ride height, bottoming, bump stops, wheels lifting,
   damper histograms and roll/dive figures, with suggestions for what to change and a
   side-by-side comparison with another setup. [How it's worked out](docs/car-setup.md).
-- **Raw telemetry recording.** Press Record, drive, then download the file. It replays
-  exactly on any computer, which makes it the best way to share a problem.
+- **Raw telemetry recording.** Press Record, drive, then download the file. Replay any recorded
+  session on the Live page, with pause and 1×/2×/4× speed, or on any other computer, which
+  makes it the best way to share a problem.
 - **Every lap saved** automatically, with sectors, top speed, fuel and tyre data, and
   downloadable as JSON.
 - **Live presets** for reading from the driving seat: arrange cards on a grid three wide and
@@ -95,8 +96,8 @@ The Live page is a grid of cards, three wide and two high, so a whole preset fit
 screen. Every card comes in a **glance** size (one cell) and a **full** size (two cells wide):
 the last corner with its speed, balance and throttle and brake strips, your line and steering
 through it against your best run, a grip circle showing how much of the car's grip you used
-through it, the next corner, corner-by-corner time, live balance, grip events, delta, lap trend
-and car status. Start from the Focus, Optimisation and Full presets,
+through it, how you used the brake and throttle, the next corner, corner-by-corner time, live
+balance, grip events, delta, lap trend, car status and the track map. Start from the Focus, Optimisation and Full presets,
 then choose **Edit layout** to add, resize or swap cards and save your own. Press
 <kbd>1</kbd>–<kbd>9</kbd> to switch between them. The **Card lab** page shows every card in
 both sizes.
@@ -107,7 +108,12 @@ both sizes.
 
 The setup page turns suspension, wheel-speed and yaw data into plain findings, each with the
 evidence and a short list of things to try. Every figure is explained in
-[docs/car-setup.md](docs/car-setup.md).
+[docs/car-setup.md](docs/car-setup.md). Its **Grip used** card shows how much of the car's grip
+you used in every corner across the session, where grip is usually left, the grip circle for
+any lap against your best run, and the most grip the car showed at each speed. It also maps
+balance at each speed and with each pedal (aero against mechanical balance, brake release
+and traction), shows gearing, shift points, downshift over-revs and time on the rev limiter,
+and measures how close to the kerbs you take each corner's turn-in, apex and exit.
 
 <img src="docs/images/setup-balance.png" alt="Balance and grip card: a balance trace by distance shaded blue above zero for understeer and orange below zero for oversteer, with slip angle and speed underneath and small triangles marking lock-ups, wheelspin and oversteer moments. Below it, a corner table gives an entry, mid-corner and exit verdict for each corner, such as 'Understeer +26%' or 'Neutral +2%'." width="100%">
 
@@ -173,12 +179,19 @@ flowchart LR
 
 Press **Record telemetry** on the Live or Sessions page before you head out, and press it again
 when you're done. Or tick **Record every session automatically** to get one file per session.
-Recordings appear on the Sessions page with a **Download** button.
+Recordings appear on the Sessions page with **Replay** and **Download** buttons, and sessions you
+recorded get a **Replay** button of their own.
+
+A replay takes over the Live page, so every card behaves as it did while you drove. Pause it,
+speed it up to 2× or 4×, and press **Stop replay** in the header to go back to listening for the
+game. The game's packets are ignored while a replay plays, and the replayed laps aren't saved
+again: they're thrown away when you stop.
 
 <img src="docs/images/recordings.png" alt="Raw telemetry recordings card with a Record telemetry button, a checkbox to record every session automatically, and a table listing a recording of Coachwood Park Grand Prix with its start time, length, file size and Download and Delete buttons." width="100%">
 
 A recording holds every packet exactly as the game sent it, so it replays identically anywhere,
-including on a Mac with no game installed:
+including on a Mac with no game installed. To add a recording from another computer to your
+saved sessions, replay it from the command line instead:
 
 ```bash
 npm run replay -- recordings/2026-09-13-19-55-01_interlagos-gp.ams2rec

@@ -3,8 +3,13 @@
  *
  *   data/sessions/<id>/session.json      summary + lap list (human readable)
  *   data/sessions/<id>/lap-007.json.gz   full telemetry trace for lap 7
+ *
+ * While a replay plays from the dashboard, new sessions go to a scratch folder
+ * instead: they can be browsed like any other until the replay stops, then
+ * they're thrown away, so replaying never saves a session twice.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { LapSummary, LapTrace, SessionMeta, StoredLap, TrackInfo, TraceChannel } from '../shared/model/types.ts';
@@ -49,6 +54,8 @@ const DECIMALS: Record<TraceChannel, number> = {
   wheelRL: 2,
   wheelRR: 2,
   grounded: 0,
+  kerb: 0,
+  throttleIn: 3,
 };
 
 const lapFile = (lap: number) => `lap-${String(lap).padStart(3, '0')}.json.gz`;
@@ -79,10 +86,18 @@ export interface Preferences {
   lastCar?: string;
 }
 
+interface Scratch {
+  dir: string;
+  sessions: Map<string, SessionMeta>;
+  /** Saved sessions left out of all-time bests, such as the one being replayed. */
+  hidden: Set<string>;
+}
+
 export class SessionStore {
   readonly root: string;
   private readonly sessions = new Map<string, SessionMeta>();
   private prefs: Preferences | null = null;
+  private scratch: Scratch | null = null;
 
   constructor(root: string) {
     this.root = root;
@@ -130,23 +145,56 @@ export class SessionStore {
     writeAtomic(this.preferencesFile, JSON.stringify(this.prefs, null, 2));
   }
 
+  /** Keep new sessions in a throwaway folder until `endScratch`. `hide` leaves saved sessions out of all-time bests meanwhile. */
+  beginScratch(hide: string[] = []): void {
+    this.endScratch();
+    this.scratch = {
+      dir: mkdtempSync(join(tmpdir(), 'ams2-coach-replay-')),
+      sessions: new Map(),
+      hidden: new Set(hide),
+    };
+  }
+
+  /** Throw away the scratch sessions. Returns their ids. */
+  endScratch(): string[] {
+    const scratch = this.scratch;
+    if (!scratch) return [];
+    this.scratch = null;
+    rmSync(scratch.dir, { recursive: true, force: true });
+    return [...scratch.sessions.keys()];
+  }
+
+  isScratch(id: string): boolean {
+    return this.scratch?.sessions.has(id) ?? false;
+  }
+
+  /** Where a session's files live. Sessions not saved before a replay started belong to the replay. */
+  private dirFor(id: string): { dir: string; scratch: boolean } {
+    const scratch = this.scratch;
+    if (scratch && (scratch.sessions.has(id) || !this.sessions.has(id))) return { dir: join(scratch.dir, id), scratch: true };
+    return { dir: join(this.sessionsDir, id), scratch: false };
+  }
+
   list(): SessionMeta[] {
-    return [...this.sessions.values()].sort((a, b) => b.startedAt - a.startedAt);
+    return [...this.sessions.values(), ...(this.scratch?.sessions.values() ?? [])].sort(
+      (a, b) => b.startedAt - a.startedAt,
+    );
   }
 
   get(id: string): SessionMeta | null {
-    return ID_PATTERN.test(id) ? (this.sessions.get(id) ?? null) : null;
+    if (!ID_PATTERN.test(id)) return null;
+    return this.scratch?.sessions.get(id) ?? this.sessions.get(id) ?? null;
   }
 
   saveSession(meta: SessionMeta): void {
-    const dir = join(this.sessionsDir, meta.id);
+    const { dir, scratch } = this.dirFor(meta.id);
     mkdirSync(dir, { recursive: true });
     writeAtomic(join(dir, 'session.json'), JSON.stringify(meta, null, 2));
-    this.sessions.set(meta.id, structuredClone(meta));
+    (scratch ? this.scratch!.sessions : this.sessions).set(meta.id, structuredClone(meta));
   }
 
   saveLap(lap: StoredLap): void {
-    const dir = join(this.sessionsDir, lap.sessionId);
+    const { dir } = this.dirFor(lap.sessionId);
     mkdirSync(dir, { recursive: true });
     const payload: StoredLap = { ...lap, trace: roundTrace(lap.trace) };
     writeAtomic(join(dir, lapFile(lap.summary.lap)), gzipSync(JSON.stringify(payload)));
@@ -154,22 +202,23 @@ export class SessionStore {
 
   loadLap(sessionId: string, lap: number): StoredLap | null {
     if (!ID_PATTERN.test(sessionId)) return null;
-    const file = join(this.sessionsDir, sessionId, lapFile(lap));
+    const file = join(this.dirFor(sessionId).dir, lapFile(lap));
     if (!existsSync(file)) return null;
     return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8')) as StoredLap;
   }
 
   delete(id: string): void {
     if (!ID_PATTERN.test(id)) return;
-    rmSync(join(this.sessionsDir, id), { recursive: true, force: true });
+    rmSync(this.dirFor(id).dir, { recursive: true, force: true });
     this.sessions.delete(id);
+    this.scratch?.sessions.delete(id);
   }
 
   /** Fastest valid flying lap stored for this track layout and car. */
   bestLap(track: TrackInfo, car: string, excludeSessionId?: string): { session: SessionMeta; summary: LapSummary } | null {
     let best: { session: SessionMeta; summary: LapSummary } | null = null;
     for (const session of this.sessions.values()) {
-      if (session.id === excludeSessionId) continue;
+      if (session.id === excludeSessionId || this.scratch?.hidden.has(session.id)) continue;
       if (session.track.location !== track.location || session.track.variation !== track.variation) continue;
       if (car && session.car !== car) continue;
       for (const summary of session.laps) {

@@ -6,6 +6,7 @@ import { Card, EmptyState } from '../components/ui.tsx';
 import { RecordingsCard } from '../components/RecordingsCard.tsx';
 import { api, useApi } from '../lib/api.ts';
 import { useLive } from '../lib/live.ts';
+import { useRecordings, useStartReplay } from '../lib/replay.ts';
 import { href } from '../lib/router.ts';
 
 const SOURCE_LABELS: Record<SessionMeta['source'], string> = {
@@ -18,6 +19,9 @@ export function SessionsView() {
   const lapSerial = useLive((s) => s.lapSerial);
   const liveId = useLive((s) => s.session?.id ?? null);
   const sessions = useApi<SessionMeta[]>(api.sessions(), lapSerial);
+  const recordings = useRecordings();
+  const replay = useStartReplay();
+  const replaying = useLive((s) => s.status?.replay?.recording ?? null);
   const [track, setTrack] = useState('all');
   const filterId = useId();
 
@@ -49,6 +53,11 @@ export function SessionsView() {
   }
 
   const tracks = [...new Set(list.map(sessionTitle))].sort();
+  const recordingFor = new Map(
+    (recordings.data?.recordings ?? [])
+      .filter((r) => r.sessionId !== null && !r.active)
+      .map((r) => [r.sessionId!, r.name]),
+  );
   const shown = track === 'all' ? list : list.filter((s) => sessionTitle(s) === track);
 
   return (
@@ -76,7 +85,15 @@ export function SessionsView() {
         </div>
       </div>
 
-      <Card title={track === 'all' ? 'All sessions' : track} description={`${shown.length} shown, newest first`}>
+      <Card
+        title={track === 'all' ? 'All sessions' : track}
+        description={`${shown.length} shown, newest first. Sessions you recorded can be replayed on the Live page.`}
+      >
+        {replay.error && (
+          <p className="error-text" role="alert">
+            {replay.error}
+          </p>
+        )}
         <div className="table-wrap">
           <table className="data">
             <thead>
@@ -88,6 +105,9 @@ export function SessionsView() {
                 <th scope="col" className="num">Laps</th>
                 <th scope="col" className="num">Best lap</th>
                 <th scope="col">Source</th>
+                <th scope="col">
+                  <span className="visually-hidden">Replay</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -108,6 +128,21 @@ export function SessionsView() {
                     </td>
                     <td className="num">{formatLapTime(best?.lapTime)}</td>
                     <td>{SOURCE_LABELS[session.source]}</td>
+                    <td>
+                      {recordingFor.has(session.id) &&
+                        (replaying === recordingFor.get(session.id) ? (
+                          <span className="badge badge-good">Replaying</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            disabled={replay.busy !== null}
+                            onClick={() => void replay.start(recordingFor.get(session.id)!)}
+                          >
+                            Replay<span className="visually-hidden"> {sessionTitle(session)}, {formatSessionDate(session.startedAt)}</span>
+                          </button>
+                        ))}
+                    </td>
                   </tr>
                 );
               })}

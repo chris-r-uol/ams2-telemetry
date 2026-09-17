@@ -15,6 +15,8 @@
  * has to pass through zero on the way).
  */
 import type { LapTrace } from '../model/types.ts';
+import type { Corner } from './corners.ts';
+import { G_SMOOTHING, smoothInTime, valueAt, type ResampledLap } from './resample.ts';
 
 export const GRIP = {
   /** Width of each speed band, m/s (36 km/h). */
@@ -24,7 +26,7 @@ export const GRIP = {
   /** The limit is the g reached or beaten this share of the time in a band. */
   percentile: 0.98,
   /** g is averaged over this many seconds either side, taking out kerb and bump noise. */
-  smoothing: 0.1,
+  smoothing: G_SMOOTHING,
   /** Below this speed (m/s) nothing is measured or counted. */
   minSpeed: 8,
   /** Cornering at this share of the grip available counts as turning, when looking for changes of direction. */
@@ -97,23 +99,6 @@ export interface GripSamples {
   brake: number[];
   latG: number[];
   lonG: number[];
-}
-
-/** Centred moving average over ±`half` seconds. Works for any spacing, as long as time doesn't go backwards. O(n). */
-export function smoothInTime(values: number[], t: number[], half: number = GRIP.smoothing): number[] {
-  const n = values.length;
-  const prefix = new Float64Array(n + 1);
-  for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i] + (Number.isFinite(values[i]) ? values[i] : 0);
-  const out = new Array<number>(n);
-  let lo = 0;
-  let hi = 0;
-  for (let i = 0; i < n; i++) {
-    while (lo < i && t[i] - t[lo] > half) lo++;
-    if (hi < i) hi = i;
-    while (hi < n - 1 && t[hi + 1] - t[i] <= half) hi++;
-    out[i] = (prefix[hi + 1] - prefix[lo]) / (hi - lo + 1);
-  }
-  return out;
 }
 
 function quantile(values: number[], p: number): number {
@@ -233,6 +218,9 @@ export function directionChanges(envelope: GripEnvelope, s: Pick<GripSamples, 't
   return mask;
 }
 
+/** Runs are sent to the browser, where a thousandth of the grip is plenty. */
+const thousandths = (v: number) => Math.round(v * 1000) / 1000;
+
 function phaseOf(throttle: number, brake: number): GripPhaseName {
   return brake > GRIP.brakeOn ? 'braking' : throttle >= GRIP.throttleOn ? 'throttle' : 'coasting';
 }
@@ -257,8 +245,8 @@ export function gripRun(envelope: GripEnvelope, s: GripSamples, incident: boolea
       skip.push('unknown');
       continue;
     }
-    lat.push(s.latG[i] / limit);
-    lon.push(s.lonG[i] / limit);
+    lat.push(thousandths(s.latG[i] / limit));
+    lon.push(thousandths(s.lonG[i] / limit));
     const flatOut = s.throttle[i] >= GRIP.flatOut && s.brake[i] <= GRIP.brakeOn;
     const reason: GripSkip | null = incident[i]
       ? 'incident'
@@ -268,7 +256,7 @@ export function gripRun(envelope: GripEnvelope, s: GripSamples, incident: boolea
           ? 'direction-change'
           : null;
     skip.push(reason);
-    use.push(reason ? null : Math.hypot(s.latG[i], s.lonG[i]) / limit);
+    use.push(reason ? null : thousandths(Math.hypot(s.latG[i], s.lonG[i]) / limit));
   }
   return { lat, lon, use, skip, summary: summarise(s, use) };
 }
@@ -356,5 +344,100 @@ function summarise(s: GripSamples, use: (number | null)[]): GripSummary {
     coasting: inPhase(totals.coasting),
     throttle: inPhase(totals.throttle),
     gap,
+  };
+}
+
+// ---------------------------------------------------------------- corners
+
+/** Grip runs start a little before the braking zone, like the corner profile. */
+export const CORNER_LEAD_IN = 40;
+export const CORNER_STEP = 2;
+
+/** Where a corner's grip run starts, metres. */
+export function cornerStart(corner: Corner): number {
+  return Math.max(0, corner.entry - CORNER_LEAD_IN);
+}
+
+/**
+ * Grip used through a corner on a lap resampled by distance, every `CORNER_STEP`
+ * metres from `cornerStart` to the exit. `incidents` are distance ranges near a
+ * spin or contact.
+ */
+export function cornerGripRun(
+  envelope: GripEnvelope,
+  corner: Corner,
+  lap: ResampledLap,
+  incidents: [number, number][] = [],
+): GripRun {
+  const samples: GripSamples = { d: [], t: [], speed: [], throttle: [], brake: [], latG: [], lonG: [] };
+  for (let d = cornerStart(corner); d <= corner.exit; d += CORNER_STEP) {
+    samples.d.push(d);
+    for (const channel of ['t', 'speed', 'throttle', 'brake', 'latG', 'lonG'] as const) {
+      samples[channel].push(valueAt(lap, channel, d));
+    }
+  }
+  const near = samples.d.map((d) => incidents.some(([from, to]) => d >= from - CORNER_STEP && d <= to + CORNER_STEP));
+  return gripRun(envelope, samples, near);
+}
+
+/** Grip used through one corner across a session's clean laps. */
+export interface CornerGripSummary {
+  cornerId: number;
+  corner: string;
+  apex: number;
+  laps: number;
+  /** Medians over the laps. */
+  use: number | null;
+  braking: number | null;
+  coasting: number | null;
+  throttle: number | null;
+  /** Your fastest run through the corner. */
+  best: { lap: number; use: number | null } | null;
+  /** Where the most grip was left most often: the phase most laps' biggest gap fell in, and its typical stretch. */
+  usualGap: { phase: GripPhaseName; laps: number; from: number; to: number; use: number } | null;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length / 2;
+  return Number.isInteger(mid) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[Math.floor(mid)];
+}
+
+export function summariseCornerGrip(
+  corner: Corner,
+  runs: { lap: number; run: GripRun }[],
+  bestLap: number | null,
+): CornerGripSummary {
+  const medianOf = (pick: (s: GripSummary) => number | null) =>
+    median(runs.map((r) => pick(r.run.summary)).filter((v): v is number => v !== null));
+  const gaps = runs.map((r) => r.run.summary.gap).filter((g): g is GripGap => g !== null);
+  const byPhase = new Map<GripPhaseName, GripGap[]>();
+  for (const gap of gaps) byPhase.set(gap.phase, [...(byPhase.get(gap.phase) ?? []), gap]);
+  const [phase, usual] = [...byPhase.entries()].reduce<[GripPhaseName | null, GripGap[]]>(
+    (most, entry) => (entry[1].length > most[1].length ? entry : most),
+    [null, []],
+  );
+  const best = runs.find((r) => r.lap === bestLap) ?? null;
+  return {
+    cornerId: corner.id,
+    corner: corner.name,
+    apex: corner.apex,
+    laps: runs.length,
+    use: medianOf((s) => s.use),
+    braking: medianOf((s) => s.braking.use),
+    coasting: medianOf((s) => s.coasting.use),
+    throttle: medianOf((s) => s.throttle.use),
+    best: best ? { lap: best.lap, use: best.run.summary.use } : null,
+    usualGap:
+      phase !== null
+        ? {
+            phase,
+            laps: usual.length,
+            from: median(usual.map((g) => g.from))!,
+            to: median(usual.map((g) => g.to))!,
+            use: median(usual.map((g) => g.use))!,
+          }
+        : null,
   };
 }

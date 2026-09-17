@@ -97,10 +97,11 @@ Thresholds live in [`src/shared/analysis/coach.ts`](../src/shared/analysis/coach
 Coaches plot a **g-g diagram** (the friction circle): cornering g across, braking and
 accelerating g up and down. A driver using the whole tyre traces round the edge, braking
 into the turn and feeding in throttle out of it; gaps inside the edge are grip left unused.
-The **Last corner grip** card draws one for every corner you drive.
+The **Last corner grip** card on the Live page draws one for every corner you drive, and the
+**Grip used** card on the Car setup page does it for every corner across the whole session.
 
 The edge isn't a tyre model. It's the most grip you've shown this session, learned from
-your last six laps:
+your last six laps while driving, or from every lap on the Car setup page:
 
 - g is averaged over ±0.1 s first, taking out kerb and bump noise.
 - Laps are split into 36 km/h speed bands. In each band the limit for cornering, braking
@@ -127,7 +128,31 @@ weighted by time. **Most grip left** is the stretch below 85% that left the most
 unused (time × grip left), at least 0.4 s long. It's measured on your best run through the
 corner too, for comparison.
 
+On the Car setup page each corner shows the median over your clean laps, and **where grip
+is usually left**: the phase that most laps' biggest gap fell in, at its typical distance
+from the apex. The table of grip at each speed is what 100% means on the circle; where you
+never braked hard at a speed, braking grip is taken to match cornering grip.
+
 The analysis lives in [`src/shared/analysis/grip.ts`](../src/shared/analysis/grip.ts).
+
+## 8. Brake and throttle technique
+
+The **Brake and throttle** card looks at how the pedals were used through each corner,
+against your best run through it, using the throttle pedal itself rather than the game's
+throttle (which includes its own blips on downshifts):
+
+| Measure | Meaning |
+|---|---|
+| To peak pressure | seconds from touching the brake to 90% of that stop's peak |
+| Release | seconds from dropping below 90% of the peak to fully off (under 5%) |
+| Trail | seconds still braking after turn-in; turn-in is where steering reaches 40% of the most used before the apex |
+| Pickup to flat out | seconds from 25% throttle, after the brake is off, to 95% |
+| Backed off | times the throttle dropped 15% or more before reaching flat out |
+| While adding lock | seconds adding throttle while the steering was still increasing |
+
+It also shows the share of the last lap spent flat out against your best lap, and picks
+out the one difference from your best run most worth knowing about. The analysis lives
+in [`src/shared/analysis/pedals.ts`](../src/shared/analysis/pedals.ts).
 
 ## Limitations
 

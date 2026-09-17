@@ -176,6 +176,41 @@ export interface PlatformSummary {
   topSpeed: number | null;
 }
 
+/** What the feet are doing: trailing off the brake into a turn, neither pedal, some throttle or flat out. */
+export type PedalPhase = 'trail-braking' | 'coasting' | 'part-throttle' | 'full-throttle';
+export const PEDAL_PHASES: PedalPhase[] = ['trail-braking', 'coasting', 'part-throttle', 'full-throttle'];
+
+export interface SpeedBand {
+  /** m/s; `to` is null for the fastest band. */
+  from: number;
+  to: number | null;
+}
+
+/**
+ * How the car handles at each speed and with each pedal. Balance that changes with speed
+ * points at aerodynamics; balance that's the same at every speed is mechanical grip. Balance
+ * that changes as you release the brake or add throttle points at brake bias, the differential
+ * and damping.
+ */
+export interface HandlingSummary {
+  bands: SpeedBand[];
+  /** Balance while cornering, by pedal phase (rows, in PEDAL_PHASES order) and speed band (columns). */
+  grid: PhaseBalance[][];
+  /** All pedal phases together, per speed band. */
+  bySpeed: PhaseBalance[];
+  /** Corners whose slowest point falls in each band. */
+  bandCorners: string[][];
+  /**
+   * Rear wheel slip against each wheel's own path, median while cornering, as a share:
+   * on the power (+ spinning) and trailing the brake (− slowing). The inside wheel spinning far
+   * more than the outside one means the differential is letting it; similar slip means it's locking them together.
+   */
+  rearSlip: {
+    power: { inside: number; outside: number; samples: number } | null;
+    braking: { inside: number; outside: number; samples: number } | null;
+  };
+}
+
 export type HintArea = 'balance' | 'suspension' | 'dampers' | 'traction' | 'braking';
 
 export interface SetupHint {
@@ -197,6 +232,7 @@ export interface ChassisAnalysis {
   /** Spins, contact and trips off the track that were left out of everything else. */
   incidents: Incident[];
   platform: PlatformSummary;
+  handling: HandlingSummary;
   hints: SetupHint[];
 }
 
@@ -398,6 +434,19 @@ export function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped:
     if (tr.t[i] >= from) mask[i] = true;
   }
   return mask;
+}
+
+/** Distance ranges of a lap near a spin or contact, from `incidentMask`. */
+export function incidentRanges(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): [number, number][] {
+  const mask = incidentMask(tr, impactG, velocityAxesSwapped);
+  const ranges: [number, number][] = [];
+  for (let i = 0; i < mask.length; i++) {
+    if (!mask[i]) continue;
+    const last = ranges.at(-1);
+    if (last && mask[i - 1]) last[1] = Math.max(last[1], tr.d[i]);
+    else ranges.push([tr.d[i], tr.d[i]]);
+  }
+  return ranges;
 }
 
 /**
@@ -974,6 +1023,7 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
 
   const cornerBalance = balanceByCorner(derived, corners, events);
   const platform = platformSummary(derived);
+  const handling = handlingSummary(derived, corners, sampleRate);
   const analysis: ChassisAnalysis = {
     lapsAnalysed: laps.length,
     availability,
@@ -983,6 +1033,7 @@ export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): Chassi
     events,
     incidents,
     platform,
+    handling,
     hints: [],
   };
   analysis.hints = buildHints(analysis);
@@ -1106,6 +1157,77 @@ function balanceByCorner(derived: DerivedLap[], corners: Corner[], events: Chass
     lockUps: events.filter((e) => e.kind === 'lock-up' && e.corner === c.name).length,
     wheelspin: events.filter((e) => e.kind === 'wheelspin' && e.corner === c.name).length,
   }));
+}
+
+/** Slow, medium and fast corners: downforce at the top of the fast band is several times that in the slow one. */
+export const SPEED_BANDS: SpeedBand[] = [
+  { from: 0, to: 120 / 3.6 },
+  { from: 120 / 3.6, to: 180 / 3.6 },
+  { from: 180 / 3.6, to: null },
+];
+
+export function pedalPhase(brake: number, throttle: number): PedalPhase | null {
+  if (brake > 0.05) return brake < 0.6 ? 'trail-braking' : null;
+  if (throttle >= 0.95) return 'full-throttle';
+  return throttle >= 0.1 ? 'part-throttle' : 'coasting';
+}
+
+function handlingSummary(derived: DerivedLap[], corners: Corner[], sampleRate: number): HandlingSummary {
+  const bandOf = (v: number) => SPEED_BANDS.findIndex((b) => v >= b.from && (b.to === null || v < b.to));
+  const empty = () => ({ extra: 0, need: 0, samples: 0 });
+  const grid = PEDAL_PHASES.map(() => SPEED_BANDS.map(empty));
+  const bySpeed = SPEED_BANDS.map(empty);
+  const slip = {
+    power: { inside: [] as number[], outside: [] as number[] },
+    braking: { inside: [] as number[], outside: [] as number[] },
+  };
+  const flying = derived.filter((dl) => dl.lap.kind === 'flying');
+
+  for (const dl of flying.length ? flying : derived) {
+    for (let i = 0; i < dl.n; i++) {
+      if (dl.incident[i]) continue;
+      const phase = pedalPhase(dl.brake[i], dl.throttle[i]);
+      if (phase === null) continue;
+      // Real cornering only: on a straight or a gentle kink the steering needed is tiny, so any offset looks huge.
+      const cornering = Math.abs(dl.need[i]) >= 0.03 && Math.abs(dl.latG[i]) >= 0.5;
+      if (cornering && Number.isFinite(dl.balance[i])) {
+        const band = bandOf(dl.speed[i]);
+        const row = PEDAL_PHASES.indexOf(phase);
+        for (const bucket of [grid[row][band], bySpeed[band]]) {
+          bucket.extra += dl.balance[i];
+          bucket.need += Math.abs(dl.need[i]);
+          bucket.samples++;
+        }
+      }
+      // Rear wheels in a proper corner: positive lateral g is a left turn, so the left wheel is inside.
+      if (Math.abs(dl.latG[i]) < 0.5 || dl.speed[i] < 12) continue;
+      const [inside, outside] = dl.latG[i] > 0 ? [2, 3] : [3, 2];
+      const sIn = dl.wheelSlip[inside][i];
+      const sOut = dl.wheelSlip[outside][i];
+      if (!Number.isFinite(sIn) || !Number.isFinite(sOut)) continue;
+      const target = dl.throttle[i] >= 0.5 && dl.brake[i] <= 0.05 ? slip.power : phase === 'trail-braking' ? slip.braking : null;
+      if (!target) continue;
+      target.inside.push(sIn);
+      target.outside.push(sOut);
+    }
+  }
+
+  // Half a second of cornering in a cell before it says anything.
+  const minSamples = Math.max(5, Math.round(sampleRate * 0.5));
+  const judge = (b: { extra: number; need: number; samples: number }) =>
+    b.samples >= minSamples ? phaseBalance(b) : { ratio: null, verdict: null, samples: b.samples };
+  const slipSummary = (s: { inside: number[]; outside: number[] }) =>
+    s.inside.length >= minSamples * 2
+      ? { inside: median(s.inside)!, outside: median(s.outside)!, samples: s.inside.length }
+      : null;
+
+  return {
+    bands: SPEED_BANDS,
+    grid: grid.map((row) => row.map(judge)),
+    bySpeed: bySpeed.map(judge),
+    bandCorners: SPEED_BANDS.map((_, b) => corners.filter((c) => bandOf(c.minSpeed) === b).map((c) => c.name)),
+    rearSlip: { power: slipSummary(slip.power), braking: slipSummary(slip.braking) },
+  };
 }
 
 function platformSummary(derived: DerivedLap[]): PlatformSummary {
@@ -1416,6 +1538,59 @@ export function buildHints(a: ChassisAnalysis): SetupHint[] {
             'Soften rear rebound damping.',
             'Brake in a straighter line before turning in.',
           ],
+    });
+  }
+
+  // Balance that shifts with speed is aerodynamic: mechanical settings change it at every speed alike.
+  const [slow, , fast] = a.handling.bySpeed;
+  if (slow.ratio !== null && fast.ratio !== null && Math.abs(fast.ratio - slow.ratio) >= 0.25) {
+    const tighter = fast.ratio > slow.ratio;
+    hints.push({
+      id: tighter ? 'aero-understeer' : 'aero-oversteer',
+      area: 'balance',
+      importance: 'medium',
+      title: tighter ? 'Understeer grows with speed' : 'The car gets looser as speed rises',
+      evidence: `In corners above 180 km/h you used ${Math.round(Math.abs(fast.ratio - slow.ratio) * 100)}% ${tighter ? 'more' : 'less'} steering, relative to what this car needs, than in corners below 120 km/h. A change with speed points at the aerodynamic balance rather than springs or anti-roll bars.`,
+      tryThis: tighter
+        ? ['Add front wing or take off rear wing.', 'Lower the front ride height or raise the rear a little, for more rake.']
+        : ['Add rear wing or take off front wing.', 'Raise the front ride height or lower the rear a little, for less rake.'],
+    });
+  }
+
+  const average = (row: PhaseBalance[]) => {
+    const judged = row.filter((c) => c.ratio !== null);
+    return judged.length ? judged.reduce((sum, c) => sum + c.ratio! * c.samples, 0) / judged.reduce((sum, c) => sum + c.samples, 0) : null;
+  };
+  const trail = average(a.handling.grid[PEDAL_PHASES.indexOf('trail-braking')]);
+  const coast = average(a.handling.grid[PEDAL_PHASES.indexOf('coasting')]);
+  if (trail !== null && coast !== null && trail <= -0.2 && trail <= coast - 0.15) {
+    hints.push({
+      id: 'trail-braking-oversteer',
+      area: 'braking',
+      importance: 'medium',
+      title: 'The rear gets loose as you come off the brake',
+      evidence: `While trailing the brake into corners you used ${Math.round(-trail * 100)}% less steering than this car needs, against ${Math.round(Math.abs(coast) * 100)}% ${coast < 0 ? 'less' : 'more'} once off both pedals.`,
+      tryThis: [
+        'Move brake bias a step forward.',
+        'Add differential coast lock or preload, if the car allows it.',
+        'Release the brake more gradually as you turn in.',
+      ],
+    });
+  }
+
+  const power = a.handling.rearSlip.power;
+  if (power && power.inside >= 0.03 && power.inside >= 2 * Math.max(power.outside, 0.005)) {
+    hints.push({
+      id: 'inside-rear-spin',
+      area: 'traction',
+      importance: 'medium',
+      title: 'The inside rear wheel spins on the power',
+      evidence: `Accelerating through corners, the inside rear typically turns ${Math.round(power.inside * 1000) / 10}% faster than its path while the outside one is at ${Math.round(power.outside * 1000) / 10}%: drive is escaping through the unloaded wheel.`,
+      tryThis: [
+        'Add differential power lock or preload, if the car allows it.',
+        'Soften the rear anti-roll bar to keep weight on the inside rear.',
+        'Squeeze the throttle more gradually until the car straightens.',
+      ],
     });
   }
 

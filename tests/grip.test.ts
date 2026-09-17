@@ -2,7 +2,15 @@
  * Grip used: the limit learned from your own laps, the friction ellipse between
  * braking and cornering, and what does and doesn't count against you.
  */
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, describe, expect, it } from 'vitest';
+import { AnalysisService } from '../src/server/analysis-service.ts';
+import { DemoSimulator } from '../src/server/demo/simulator.ts';
+import { SessionManager } from '../src/server/session-manager.ts';
+import { SessionStore } from '../src/server/storage.ts';
+import { TelemetryHub } from '../src/server/telemetry/hub.ts';
 import {
   directionChanges,
   GRIP,
@@ -155,5 +163,42 @@ describe('resampling g', () => {
     const peak = Math.max(...resampled.latG);
     expect(peak).toBeLessThan(1.4);
     expect(peak).toBeGreaterThan(1);
+  });
+});
+
+describe('grip used across a session on the demo car', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ams2-coach-grip-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  const hub = new TelemetryHub();
+  const store = new SessionStore(dir);
+  const analysis = new AnalysisService(store);
+  const manager = new SessionManager(hub, store, analysis, 'demo');
+  const demo = new DemoSimulator((bytes) => hub.ingest(bytes), { seed: 11 });
+  demo.runLaps(5);
+  demo.runFor(2);
+  const sessionId = manager.session!.id;
+  const grip = analysis.grip(sessionId)!;
+
+  it('summarises every corner over the clean laps', () => {
+    expect(grip.envelope).not.toBeNull();
+    expect(grip.lapsAnalysed).toBeGreaterThanOrEqual(3);
+    expect(grip.corners).toHaveLength(manager.corners.length);
+    for (const corner of grip.corners) {
+      expect(corner.laps).toBe(grip.lapsAnalysed);
+      expect(corner.use).toBeGreaterThan(0.4);
+      expect(corner.use).toBeLessThanOrEqual(1);
+      expect(corner.best).not.toBeNull();
+    }
+  });
+
+  it("gives one lap's run through each corner next to the best run", () => {
+    const lap = analysis.gripLap(sessionId, 3)!;
+    expect(lap.corners).toHaveLength(grip.corners.length);
+    for (const corner of lap.corners) {
+      const points = Math.floor((corner.apex - corner.from) / corner.step);
+      expect(corner.run.lat.length).toBeGreaterThan(points);
+      expect(corner.best?.use).toHaveLength(corner.run.use.length);
+    }
   });
 });

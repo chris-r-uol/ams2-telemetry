@@ -18,14 +18,14 @@ import {
   type Units,
 } from '../../shared/format.ts';
 import type { FlagColour } from '../../shared/protocol/constants.ts';
-import type { FuelState, LapFeedback, LiveFrame, SessionMeta } from '../../shared/model/types.ts';
+import type { FuelState, LiveFrame, SessionMeta } from '../../shared/model/types.ts';
 import { bestLap, bestSectors, gearLabel, LapStatus } from '../components/laps.tsx';
 import { PresetBoard } from '../components/PresetBoard.tsx';
 import { RecordButton } from '../components/RecordButton.tsx';
 import { TraceStack, type TracePanel } from '../components/TraceStack.tsx';
-import { TrackMap, type MapSegment } from '../components/TrackMap.tsx';
+import { LiveTrackMap, useCostlyCorners, useLiveReference } from '../cards/TrackMapCard.tsx';
 import { Card, DeltaValue, EmptyState } from '../components/ui.tsx';
-import { api, useApi, type LiveReferenceDto } from '../lib/api.ts';
+import type { LiveReferenceDto } from '../lib/api.ts';
 import { getLive, getTrail, subscribeLive, useLive } from '../lib/live.ts';
 import { href } from '../lib/router.ts';
 import { useSettings, type Settings } from '../lib/settings.ts';
@@ -47,12 +47,9 @@ export function LiveView() {
   const settings = useSettings();
   const sessionId = useLive((s) => s.frame?.sessionId ?? null);
   const receiving = useLive((s) => s.frame?.receiving ?? false);
-  const referenceKey = useLive((s) => `${s.frame?.referenceSource}:${s.frame?.referenceLap}:${s.frame?.referenceLapTime}`);
   const session = useLive((s) => s.session);
-  const feedback = useLive((s) => s.feedback);
   const source = useLive((s) => s.status?.source ?? null);
-
-  const reference = useApi<LiveReferenceDto | null>(sessionId ? api.liveReference() : null, `${sessionId}:${referenceKey}`);
+  const reference = useLiveReference();
 
   if (!sessionId) {
     return <WaitingForGame receiving={receiving} source={source} />;
@@ -67,9 +64,9 @@ export function LiveView() {
           Track, car and traces
         </h2>
         <div className="live-grid">
-          <MapCard reference={reference.data ?? null} feedback={feedback} mirror={settings.mirrorMap} />
+          <MapCard reference={reference} />
           <CarCard settings={settings} />
-          <LiveTraceCard reference={reference.data ?? null} units={settings.units} />
+          <LiveTraceCard reference={reference} units={settings.units} />
           <RecentLaps session={session} />
         </div>
       </section>
@@ -178,36 +175,12 @@ function SessionStrip({ session }: { session: SessionMeta | null }) {
   );
 }
 
-function MapCard({
-  reference,
-  feedback,
-  mirror,
-}: {
-  reference: LiveReferenceDto | null;
-  feedback: LapFeedback | null;
-  mirror: boolean;
-}) {
-  const x = useLive((s) => s.frame?.x ?? 0);
-  const z = useLive((s) => s.frame?.z ?? 0);
-  const segments = useMemo<MapSegment[] | undefined>(() => {
-    if (!reference || !feedback) return undefined;
-    return feedback.tips
-      .map((tip) => ({ corner: reference.corners.find((c) => c.id === tip.cornerId)!, timeDelta: tip.timeLost }))
-      .filter((s) => s.corner && s.timeDelta > 0);
-  }, [reference, feedback]);
-
+function MapCard({ reference }: { reference: LiveReferenceDto | null }) {
+  const feedback = useLive((s) => s.feedback);
+  const segments = useCostlyCorners(reference, feedback);
   return (
     <Card title="Track" className="map-card" description={segments?.length ? 'Marked corners cost the most time last lap' : undefined}>
-      <TrackMap
-        x={reference?.resampled.x ?? []}
-        z={reference?.resampled.z ?? []}
-        step={reference?.resampled.step ?? 2}
-        car={{ x, z }}
-        corners={reference?.corners}
-        segments={segments}
-        mirror={mirror}
-        title="Track map with your car's current position"
-      />
+      <LiveTrackMap reference={reference} segments={segments} />
     </Card>
   );
 }

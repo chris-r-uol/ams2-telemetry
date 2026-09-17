@@ -22,7 +22,7 @@ export interface LiveSocketDeps {
 
 const RECEIVING_WINDOW_MS = 2000;
 
-export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(): void } {
+export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(): void; resync(): void } {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', (req, socket, head) => {
@@ -46,17 +46,17 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
     deps.hub.lastPacketAt !== null && Date.now() - deps.hub.lastPacketAt < RECEIVING_WINDOW_MS;
   const frame = (): LiveFrame => ({ ...deps.manager.frame(receiving()), coach: deps.coach.frame() });
 
+  const hello = (): ServerMessage => ({
+    type: 'hello',
+    version: deps.version,
+    status: deps.status(),
+    session: deps.manager.session,
+    feedback: deps.manager.lastFeedback,
+    insights: deps.coach.insights(),
+  });
+
   wss.on('connection', (ws) => {
-    ws.send(
-      encode({
-        type: 'hello',
-        version: deps.version,
-        status: deps.status(),
-        session: deps.manager.session,
-        feedback: deps.manager.lastFeedback,
-        insights: deps.coach.insights(),
-      }),
-    );
+    ws.send(encode(hello()));
     ws.send(encode({ type: 'frame', frame: frame() }));
   });
 
@@ -81,6 +81,11 @@ export function attachLiveSocket(server: Server, deps: LiveSocketDeps): { close(
   const offInsights = deps.coach.onInsights((insights) => broadcast({ type: 'insights', insights }));
 
   return {
+    /** Everything the browser holds may be stale, as when a replay starts or stops: send it all again. */
+    resync() {
+      broadcast(hello());
+      broadcast({ type: 'frame', frame: frame() });
+    },
     close() {
       clearInterval(frameTimer);
       clearInterval(statusTimer);

@@ -47,7 +47,7 @@ export class SessionManager {
   private readonly hub: TelemetryHub;
   private readonly store: SessionStore;
   private readonly analysis: AnalysisService;
-  private readonly source: SourceKind;
+  private source: SourceKind;
   private readonly builder = new LapBuilder();
   private laps: AnalysedLap[] = [];
   private readonly metricsCache = new Map<AnalysedLap, CornerMetrics[]>();
@@ -56,6 +56,7 @@ export class SessionManager {
   private readonly sessionListeners = new Set<SessionListener>();
   private readonly lapListeners = new Set<LapListener>();
   private readonly tickListeners = new Set<(tick: Tick) => void>();
+  private readonly resetListeners = new Set<() => void>();
 
   constructor(hub: TelemetryHub, store: SessionStore, analysis: AnalysisService, source: SourceKind) {
     this.hub = hub;
@@ -75,6 +76,30 @@ export class SessionManager {
   onLap(listener: LapListener): () => void {
     this.lapListeners.add(listener);
     return () => this.lapListeners.delete(listener);
+  }
+
+  /** Called when the live session is dropped because a different feed took over. */
+  onReset(listener: () => void): () => void {
+    this.resetListeners.add(listener);
+    return () => this.resetListeners.delete(listener);
+  }
+
+  /**
+   * Drop the live session and start afresh from a different feed, as when a replay
+   * takes over from the game or hands back. The next on-track packet starts a new session.
+   */
+  resetFeed(source: SourceKind): void {
+    this.source = source;
+    this.session = null;
+    this.builder.reset();
+    this.laps = [];
+    this.metricsCache.clear();
+    this.reference = null;
+    this.corners = [];
+    this.lastFeedback = null;
+    this.lookedForAllTimeBest = false;
+    this.lastTick = null;
+    for (const listener of this.resetListeners) listener();
   }
 
   /** Called after each on-track tick has been added to the current lap. */

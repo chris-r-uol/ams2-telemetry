@@ -131,6 +131,17 @@ describe('chassis analysis on the demo car', () => {
     expect(a.corners.filter((c) => c.mid.verdict === 'understeer').length).toBeGreaterThanOrEqual(3);
   });
 
+  it('maps balance by speed and pedal, and the rear wheels through corners', () => {
+    const h = a.handling;
+    expect(h.grid).toHaveLength(4);
+    expect(h.grid.every((row) => row.length === h.bands.length)).toBe(true);
+    // The demo's slow corners understeer, most of all trailing the brake; the fast ones don't.
+    expect(h.bySpeed[0].ratio!).toBeGreaterThan(h.bySpeed[2].ratio! + 0.05);
+    expect(h.grid[0][0].verdict).toBe('understeer');
+    expect(h.bandCorners.flat().length).toBe(detected.length);
+    expect(h.rearSlip.power).not.toBeNull();
+  });
+
   it('builds damper histograms and platform figures', () => {
     for (const wheel of a.wheels) {
       expect(wheel.damper).not.toBeNull();

@@ -44,36 +44,69 @@ export interface ReplayOptions {
   onError?: (error: Error) => void;
 }
 
-/** Replay a recording with its original timing, scaled by a speed that can change while it plays. */
-export function startReplay(options: ReplayOptions): { close(): void; setSpeed(speed: number): void } {
+export interface ReplayControl {
+  close(): void;
+  setSpeed(speed: number): void;
+  setPaused(paused: boolean): void;
+}
+
+/** Longest single wait, so a pause or change of speed takes effect straight away. */
+const MAX_WAIT_MS = 100;
+
+/** Replay a recording with its original timing, scaled by a speed that can change, and paused, while it plays. */
+export function startReplay(options: ReplayOptions): ReplayControl {
   let stopped = false;
+  let paused = false;
+  let wake: (() => void) | null = null;
   let speed = options.speed;
-  // Wall-clock and recording time at the last start or change of speed.
+  // Wall-clock and recording time at the last start, change of speed or resume.
   let anchorWall = performance.now();
   let anchorOffset = 0;
+  const reanchor = () => {
+    const now = performance.now();
+    if (!paused) anchorOffset += (now - anchorWall) * speed;
+    anchorWall = now;
+  };
   const run = async () => {
     do {
       anchorWall = performance.now();
       anchorOffset = 0;
       for await (const { offsetMs, bytes } of readRecording(options.file)) {
-        if (stopped) return;
-        const wait = anchorWall + (offsetMs - anchorOffset) / speed - performance.now();
-        if (wait > 4) await sleep(wait);
+        for (;;) {
+          if (stopped) return;
+          if (paused) {
+            await new Promise<void>((resolve) => (wake = resolve));
+            continue;
+          }
+          const wait = anchorWall + (offsetMs - anchorOffset) / speed - performance.now();
+          if (wait <= 4) break;
+          await sleep(Math.min(wait, MAX_WAIT_MS));
+        }
         options.onPacket(bytes, Date.now());
       }
     } while (options.loop && !stopped);
     options.onEnd?.();
   };
   run().catch((error: Error) => options.onError?.(error));
+  const resume = () => {
+    const w = wake;
+    wake = null;
+    w?.();
+  };
   return {
     close: () => {
       stopped = true;
+      resume();
     },
     setSpeed: (next: number) => {
-      const now = performance.now();
-      anchorOffset += (now - anchorWall) * speed;
-      anchorWall = now;
+      reanchor();
       speed = next;
+    },
+    setPaused: (next: boolean) => {
+      if (next === paused) return;
+      reanchor();
+      paused = next;
+      if (!paused) resume();
     },
   };
 }

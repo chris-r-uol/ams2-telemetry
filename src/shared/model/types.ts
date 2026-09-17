@@ -2,6 +2,7 @@ import type { FlagColour, GameState, PitMode, SessionState } from '../protocol/c
 import type { ChassisEventKind, PhaseBalance, Wheel } from '../analysis/chassis.ts';
 import type { CoachTip } from '../analysis/coach.ts';
 import type { GripRun } from '../analysis/grip.ts';
+import type { PedalTechnique } from '../analysis/pedals.ts';
 import type { Habit } from '../analysis/session.ts';
 
 export type Quad = [number, number, number, number];
@@ -50,6 +51,8 @@ export const TRACE_CHANNELS = [
   'wheelRL',
   'wheelRR',
   'grounded', // bit per wheel (FL=1, FR=2, RL=4, RR=8) when touching the ground
+  'kerb', // bit per wheel (FL=1, FR=2, RL=4, RR=8) on a kerb or the painted edge. Laps saved before this existed won't have it.
+  'throttleIn', // the throttle pedal itself, 0..1, without the game's blips and cuts. Laps saved before this existed won't have it.
 ] as const;
 
 export type TraceChannel = (typeof TRACE_CHANNELS)[number];
@@ -188,9 +191,11 @@ export interface CornerProfile {
   bestSpeed: (number | null)[];
   /** Extra steering as a share of what the car needed: + understeer, − oversteer. */
   balance: (number | null)[];
-  /** Pedal positions, 0 to 1. */
+  /** Pedal positions, 0 to 1: the throttle pedal itself, without the game's blips. This run and your best run. */
   throttle: (number | null)[];
   brake: (number | null)[];
+  bestThrottle: (number | null)[];
+  bestBrake: (number | null)[];
   /** Steering, −1 full left to 1 full right: this run and your best run through the corner. */
   steering: (number | null)[];
   bestSteering: (number | null)[];
@@ -235,6 +240,16 @@ export interface CornerReport {
   profile: CornerProfile;
   /** Null until a lap has shown how much grip the car has. */
   grip: CornerGrip | null;
+  /** How the brake and throttle were used: this run and your best run through the corner. */
+  pedals: { run: PedalTechnique; best: PedalTechnique | null };
+}
+
+/** Share of the lap spent flat out, for the last complete lap and your best lap this session. */
+export interface LapPedals {
+  lap: number;
+  fullThrottle: number | null;
+  bestLap: number | null;
+  bestFullThrottle: number | null;
 }
 
 /** What to aim for in a corner: your best run, and anything to work on. */
@@ -269,6 +284,7 @@ export interface LiveInsights {
   events: LiveEvent[];
   plans: CornerPlan[];
   idealLapTime: number | null;
+  lapPedals: LapPedals | null;
 }
 
 /** Fast-changing coaching values sent with every live frame. */
@@ -315,6 +331,16 @@ export interface RecordingInfo {
   track: string | null;
   car: string | null;
   active: boolean;
+  /** The saved session this recording captured, if known. */
+  sessionId: string | null;
+}
+
+/** A recording replayed from the dashboard. It takes over from the game until it's stopped. */
+export interface ReplayStatus {
+  recording: string;
+  track: string | null;
+  sessionId: string | null;
+  finished: boolean;
 }
 
 export interface SourceStatus {
@@ -322,6 +348,9 @@ export interface SourceStatus {
   detail: string;
   /** Demo or replay speed, which the dashboard can change. Null when the game is the source. */
   playbackSpeed: number | null;
+  /** The demo or replay is paused. */
+  paused: boolean;
+  replay: ReplayStatus | null;
   packetsPerSecond: number;
   packetCounts: Record<string, number>;
   lastPacketAt: number | null;

@@ -1,5 +1,4 @@
 import type { LapTrace } from '../model/types.ts';
-import { smoothInTime } from './grip.ts';
 
 export const RESAMPLED_CHANNELS = [
   't',
@@ -14,6 +13,8 @@ export const RESAMPLED_CHANNELS = [
   'latG',
   'lonG',
   'off',
+  'kerb',
+  'throttleIn',
 ] as const;
 
 export type ResampledChannel = (typeof RESAMPLED_CHANNELS)[number];
@@ -22,10 +23,30 @@ export type ResampledChannel = (typeof RESAMPLED_CHANNELS)[number];
 export type ResampledLap = { step: number; d: number[] } & Record<ResampledChannel, number[]>;
 
 /** Channels that hold discrete values and must not be interpolated. */
-const STEPPED = new Set<ResampledChannel>(['gear', 'off']);
+const STEPPED = new Set<ResampledChannel>(['gear', 'off', 'kerb']);
 
 /** Averaged over a moment first: single g samples carry kerb and bump noise, and a 2 m grid would pick them at random. */
 const SMOOTHED = new Set<ResampledChannel>(['latG', 'lonG']);
+
+/** Seconds either side that g is averaged over. */
+export const G_SMOOTHING = 0.1;
+
+/** Centred moving average over ±`half` seconds. Works for any spacing, as long as time doesn't go backwards. O(n). */
+export function smoothInTime(values: number[], t: number[], half: number = G_SMOOTHING): number[] {
+  const n = values.length;
+  const prefix = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i] + (Number.isFinite(values[i]) ? values[i] : 0);
+  const out = new Array<number>(n);
+  let lo = 0;
+  let hi = 0;
+  for (let i = 0; i < n; i++) {
+    while (lo < i && t[i] - t[lo] > half) lo++;
+    if (hi < i) hi = i;
+    while (hi < n - 1 && t[hi + 1] - t[i] <= half) hi++;
+    out[i] = (prefix[hi + 1] - prefix[lo]) / (hi - lo + 1);
+  }
+  return out;
+}
 
 export const DEFAULT_STEP_METRES = 2;
 
@@ -52,6 +73,10 @@ export function resampleByDistance(trace: LapTrace, step = DEFAULT_STEP_METRES, 
   for (const channel of RESAMPLED_CHANNELS) {
     const values = trace[channel];
     source[channel] = SMOOTHED.has(channel) && values?.length === trace.t.length ? smoothInTime(values, trace.t) : values;
+  }
+  // Laps saved before the pedal itself was recorded: the game's throttle, without its blips while braking.
+  if (source.throttleIn?.length !== trace.t.length) {
+    source.throttleIn = trace.throttle.map((v, i) => ((trace.brake[i] ?? 0) > 0.1 ? 0 : v));
   }
 
   const end = length ?? trace.d[order[order.length - 1]];

@@ -6,6 +6,7 @@ import { bestLap, bestSectors, formatSessionDate, isCoachable, LapStatus, sessio
 import { Card, DeltaValue, EmptyState, Stat } from '../components/ui.tsx';
 import { api, sendJson, useApi, type InsightsDto } from '../lib/api.ts';
 import { useLive } from '../lib/live.ts';
+import { useRecordings, useStartReplay } from '../lib/replay.ts';
 import { href, navigate } from '../lib/router.ts';
 import { useSettings } from '../lib/settings.ts';
 import { useElementWidth } from '../lib/useElementWidth.ts';
@@ -16,6 +17,9 @@ export function SessionView({ id }: { id: string }) {
   const refresh = isLive ? lapSerial : 0;
   const session = useApi<SessionMeta>(api.session(id), refresh);
   const insights = useApi<InsightsDto>(api.insights(id), refresh);
+  const recording = useRecordings().data?.recordings.find((r) => r.sessionId === id && !r.active) ?? null;
+  const replay = useStartReplay();
+  const replaying = useLive((s) => recording !== null && s.status?.replay?.recording === recording.name);
   const { units } = useSettings();
   const [selected, setSelected] = useState<number[]>([]);
 
@@ -82,6 +86,21 @@ export function SessionView({ id }: { id: string }) {
           <a className="btn" href={href({ name: 'setup', session: id, lap: null, compare: null })}>
             Car setup
           </a>
+          {recording &&
+            (replaying ? (
+              <a className="btn" href={href({ name: 'live' })}>
+                Watch the replay
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                disabled={replay.busy !== null}
+                onClick={() => void replay.start(recording.name)}
+              >
+                Replay session
+              </button>
+            ))}
           <a className="btn" href={api.sessionExport(id)} download>
             Download lap data
           </a>
@@ -92,6 +111,11 @@ export function SessionView({ id }: { id: string }) {
           )}
         </div>
       </header>
+      {replay.error && (
+        <p className="error-text" role="alert">
+          {replay.error}
+        </p>
+      )}
 
       <div className="stats-row">
         <Stat label="Best lap" value={formatLapTime(best?.lapTime)} detail={best ? `Lap ${best.lap}` : 'No clean laps yet'} />

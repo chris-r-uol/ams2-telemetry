@@ -3,7 +3,9 @@
 The **Car setup** page looks at how the car behaves rather than how you drive it:
 balance (understeer and oversteer), sliding, lock-ups and wheelspin, suspension
 travel, ride height, bottoming, bump stops, wheels lifting, damper movement, and
-roll, dive and aero squat. It finishes with suggestions for what to change.
+roll, dive and aero squat, handling at each speed and with each pedal, gearing and
+shifts, and how much of the track you use. It finishes with suggestions for what to
+change.
 
 Automobilista 2 doesn't send values called "understeer" or "bottoming". Some
 figures come straight from the game; the rest are worked out from several
@@ -23,6 +25,9 @@ channels together. This page explains which is which.
 | Bottoming | ride height | Ride height at or below 3 mm. |
 | Bump stops | suspension travel | Travel repeatedly stopping at the same ceiling. |
 | Roll, dive, aero squat | suspension travel | Compression against lateral g, braking g and speed². |
+| Gear, revs, rev limit | `sGearNumGears`, `sRpm` | Gear held through the neutral blip of each shift; limit from the highest revs flat out. |
+| Kerbs and track edges | `sTerrain`, per wheel | Rumble strips, drains, astroturf and painted run-off count as the edge. |
+| Throttle pedal | `sUnfilteredThrottle` | The pedal itself: `sThrottle` includes the game's blips on downshifts. |
 
 The **Data from the game** card at the top of the page shows which of these were
 found in your session, and the units and directions that were detected.
@@ -139,6 +144,59 @@ distributions, the events and the hints. A moment counts when:
 
 One second before and three seconds after each one are left out too. The **Data from the
 game** card says what was left out.
+
+## Handling by speed and pedal
+
+The same balance measure as above, split two ways:
+
+- **Speed:** under 120 km/h, 120–180 km/h and over 180 km/h. Downforce grows with the
+  square of speed, so it's several times stronger in the fast band than the slow one. A
+  balance that shifts between bands points at the aerodynamic balance (wings, rake); one
+  that's the same in every band is mechanical (springs, anti-roll bars).
+- **Pedal:** trailing off the brake (5–60% pressure), off both pedals, part throttle and
+  flat out. Heavy braking in a straight line is left out. A change as the brake comes off
+  points at brake bias, differential coast lock and damping; a change with throttle
+  points at the differential's power lock and traction.
+
+Only real cornering counts: at least 3% of steering lock needed and 0.5 g sideways. On a
+straight the steering needed is tiny, so any offset would look huge. A cell needs half a
+second of cornering before it gives a verdict.
+
+**Rear wheels through corners** compares each rear wheel's speed with the speed of its own
+path (the outside wheel travels further than the inside one), while cornering at 0.5 g or
+more. On the power, the inside wheel spinning much more than the outside one means drive
+is escaping through the unloaded wheel, which more power lock or preload would reduce.
+Trailing the brake, the inside wheel slowing much more is the rear going light.
+
+## Gearing and shifts
+
+- **Ratios:** speed per 1,000 rpm in each gear, and the speed each gear reaches at the rev
+  limit.
+- **Upshifts** made flat out: the revs and speed at the change, and the **pull after the
+  shift**, the acceleration 0.35–0.7 s after the change minus the acceleration 0.1–0.45 s
+  before it. Both are at nearly the same speed, so drag and gradient cancel out. If the
+  higher gear pulls harder (by more than 0.02 g, over at least three shifts), changing
+  up sooner is quicker; if it pulls less and there were revs to spare, later is.
+- **Downshifts:** how high the revs flare in the 0.4 s after each one, as a share of the
+  limit, and any rear lock-up straight after.
+- **On the rev limiter:** flat out with the revs within 1.5% of the limit for 0.3 s or more,
+  grouped by gear and the corner it happened before. In top gear that means the gearing
+  runs out on that straight, unless a slipstream took you there.
+- **Gears by corner:** the lowest gear used in each corner on clean laps, with the median
+  time through the corner for each choice.
+
+## Track use
+
+AMS2 doesn't send where the track edges are, but it does say what surface each wheel is
+on. Wherever a wheel touched a kerb or the painted edge on any lap, the car's sideways
+position there (measured from your best lap's line) marks that edge, for 8 m either way.
+Each clean lap is then measured against it in three parts of every corner: the outside
+edge before turning in, the inside edge within 20 m of the apex, and the outside edge on
+the way out. Which side is outside comes from the way your best lap turns in each part,
+so chicanes get the right edges.
+
+Where no lap has touched a kerb, the edge can't be measured. Laps saved before kerb
+contact was recorded aren't included.
 
 ## Setup hints
 

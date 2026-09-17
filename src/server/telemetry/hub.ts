@@ -4,6 +4,7 @@
  * game state, weather).
  */
 import {
+  KERB_TERRAIN,
   OFF_TRACK_TERRAIN,
   PARTICIPANTS_PER_PACKET,
   TyreFlag,
@@ -50,7 +51,11 @@ export interface Tick {
   latG: number;
   lonG: number;
   offWheels: number;
+  /** Bit per wheel (FL=1, FR=2, RL=4, RR=8) on a kerb or the painted edge. */
+  kerbMask: number;
   steeringInput: number;
+  /** The throttle pedal itself, 0..1: `throttle` also includes the game's own blips on downshifts and cuts on upshifts. */
+  throttleInput: number;
   yawRate: number;
   vLat: number;
   vLon: number;
@@ -105,7 +110,11 @@ function pressureScale(values: number[]): number {
 
 export function toTick(t: TelemetryPacket, p: ParticipantTiming, viewedIndex: number, at: number): Tick {
   let offWheels = 0;
-  for (const material of t.terrain) if (OFF_TRACK_TERRAIN.has(material)) offWheels++;
+  let kerbMask = 0;
+  t.terrain.forEach((material, w) => {
+    if (OFF_TRACK_TERRAIN.has(material)) offWheels++;
+    if (KERB_TERRAIN.has(material)) kerbMask |= 1 << w;
+  });
   return {
     at,
     viewedIndex,
@@ -133,7 +142,9 @@ export function toTick(t: TelemetryPacket, p: ParticipantTiming, viewedIndex: nu
     latG: t.localAcceleration[0] / G,
     lonG: -t.localAcceleration[2] / G,
     offWheels,
+    kerbMask,
     steeringInput: t.unfilteredSteering / 127,
+    throttleInput: t.unfilteredThrottle / 255,
     yawRate: t.angularVelocity[1],
     vLat: t.localVelocity[0],
     vLon: t.localVelocity[2],
@@ -195,6 +206,31 @@ export class TelemetryHub {
   onOfficialLapTime(listener: (lapTime: number) => void): () => void {
     this.lapTimeListeners.add(listener);
     return () => this.lapTimeListeners.delete(listener);
+  }
+
+  /** Forget everything learned from the packets so far, before a different feed takes over. */
+  reset(): void {
+    Object.assign(this.context, {
+      track: null,
+      car: '',
+      carClass: '',
+      vehicles: [],
+      driver: '',
+      gameState: 'playing',
+      sessionState: 'invalid',
+      ambientC: 0,
+      trackC: 0,
+      rain: 0,
+      numParticipants: 0,
+    } satisfies SessionContext);
+    this.lastPacketAt = null;
+    this.latestRaw.clear();
+    this.timings = null;
+    this.viewedIndex = 0;
+    this.lastOfficialLapTime = -1;
+    this.names.clear();
+    this.vehicles.clear();
+    this.classes.clear();
   }
 
   /** Track, names, game state and time stats as last received, in a sensible replay order. */

@@ -51,6 +51,7 @@ function pushSample(tr: LapTrace, t: number, d: number, tick: Tick): void {
   tr.lonG.push(tick.lonG);
   tr.off.push(tick.offWheels);
   tr.steerIn.push(tick.steeringInput);
+  tr.throttleIn.push(tick.throttleInput);
   tr.yawRate.push(tick.yawRate);
   tr.vLat.push(tick.vLat);
   tr.vLon.push(tick.vLon);
@@ -74,6 +75,7 @@ function pushSample(tr: LapTrace, t: number, d: number, tick: Tick): void {
   tr.wheelRL.push(tick.wheelRps[2]);
   tr.wheelRR.push(tick.wheelRps[3]);
   tr.grounded.push(tick.groundedMask);
+  tr.kerb.push(tick.kerbMask);
 }
 
 const LEAVING_PITS = new Set(['inPit', 'drivingOutOfPits', 'inGarage', 'drivingOutOfGarage']);

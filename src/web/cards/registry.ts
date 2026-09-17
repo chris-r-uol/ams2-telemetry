@@ -7,8 +7,10 @@ import { BalanceMeterCard, CarStatusCard, GripEventsCard } from './CarCards.tsx'
 import { CornerStripCard, LastCornerCard, NextCornerCard } from './CornerCards.tsx';
 import { DeltaPotentialCard, LapTrendCard, OneThingCard } from './DriverCards.tsx';
 import { CornerGripCard } from './GripCard.tsx';
+import { PedalCard } from './PedalCard.tsx';
 import type { CardSize } from './parts.tsx';
 import { CornerSteeringCard } from './SteeringCard.tsx';
+import { TrackMapCard } from './TrackMapCard.tsx';
 
 export type CardId =
   | 'last-corner'
@@ -21,7 +23,9 @@ export type CardId =
   | 'lap-trend'
   | 'car'
   | 'corner-steering'
-  | 'corner-grip';
+  | 'corner-grip'
+  | 'track-map'
+  | 'pedals';
 
 export type CardKind = 'insight' | 'timing' | 'hud';
 
@@ -132,6 +136,24 @@ export const CARDS: CardDefinition[] = [
     name: 'Last corner grip',
     Component: CornerGripCard,
     what: "How much of the car's grip you used through the corner you just drove, as the g-g diagram (friction circle) coaches use. The circle is the most grip you've shown at each speed, so wherever your trace cuts inside it, grip went unused. Shows where along the corner the biggest gap was, braking, off the pedals or on part throttle, against your best run.",
+    updates: 'Once per corner, as you exit',
+    kind: 'insight',
+  },
+  {
+    id: 'track-map',
+    letter: 'L',
+    name: 'Track map',
+    Component: TrackMapCard,
+    what: 'The track with your car on it and the corners labelled, drawn from your reference lap. Corners that cost the most time last lap are marked. The map scales to fit whichever size you give it.',
+    updates: 'Continuously',
+    kind: 'hud',
+  },
+  {
+    id: 'pedals',
+    letter: 'M',
+    name: 'Brake and throttle',
+    Component: PedalCard,
+    what: "How you used the pedals through the corner you just drove, against your best run: how quickly the brake reached its peak, how it came off and trailed into the turn, how long from picking up the throttle to flat out, and whether it wavered or went in while you were still adding steering. Plus how much of the last lap was flat out. Uses the pedal itself, so the game's blips on downshifts don't count.",
     updates: 'Once per corner, as you exit',
     kind: 'insight',
   },
