@@ -3,6 +3,7 @@ import type { PressureUnit, SpeedUnit, TemperatureUnit } from '../../shared/form
 import { Card } from '../components/ui.tsx';
 import { useLive } from '../lib/live.ts';
 import { updateSettings, useSettings, type ThemeSetting } from '../lib/settings.ts';
+import { TYRE_MARGIN } from '../lib/tyres.ts';
 
 function Segmented<T extends string | number>({
   label,
@@ -144,36 +145,51 @@ export function SettingsView() {
             ]}
             onChange={(pressure) => updateSettings({ units: { ...settings.units, pressure } })}
           />
-          <div className="setting">
-            <span className="setting-label">Tyre temperature window (°C)</span>
-            <div className="inline-fields">
-              <div className="field">
-                <label htmlFor={lowId}>Cold below</label>
-                <input
-                  id={lowId}
-                  type="number"
-                  inputMode="numeric"
-                  min={20}
-                  max={high - 1}
-                  value={low}
-                  onChange={(e) => updateSettings({ tyreWindow: [Number(e.target.value), high] })}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor={highId}>Hot above</label>
-                <input
-                  id={highId}
-                  type="number"
-                  inputMode="numeric"
-                  min={low + 1}
-                  max={150}
-                  value={high}
-                  onChange={(e) => updateSettings({ tyreWindow: [low, Number(e.target.value)] })}
-                />
+          <Segmented<'auto' | 'fixed'>
+            label="Tyre temperature window"
+            hint={
+              settings.tyreWindowMode === 'auto'
+                ? `A tyre is flagged Cold or Hot when it's ${TYRE_MARGIN} °C or more from where it usually runs this session, after two flying laps. Working temperatures vary too much by car and compound for one range to fit all.`
+                : 'Tyres outside this range are flagged Cold or Hot. Windows vary by car and compound.'
+            }
+            value={settings.tyreWindowMode}
+            options={[
+              { value: 'auto', label: 'From this session' },
+              { value: 'fixed', label: 'Fixed range' },
+            ]}
+            onChange={(tyreWindowMode) => updateSettings({ tyreWindowMode })}
+          />
+          {settings.tyreWindowMode === 'fixed' && (
+            <div className="setting">
+              <span className="setting-label">Tyre temperature window (°C)</span>
+              <div className="inline-fields">
+                <div className="field">
+                  <label htmlFor={lowId}>Cold below</label>
+                  <input
+                    id={lowId}
+                    type="number"
+                    inputMode="numeric"
+                    min={20}
+                    max={high - 1}
+                    value={low}
+                    onChange={(e) => updateSettings({ tyreWindow: [Number(e.target.value), high] })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor={highId}>Hot above</label>
+                  <input
+                    id={highId}
+                    type="number"
+                    inputMode="numeric"
+                    min={low + 1}
+                    max={150}
+                    value={high}
+                    onChange={(e) => updateSettings({ tyreWindow: [low, Number(e.target.value)] })}
+                  />
+                </div>
               </div>
             </div>
-            <span className="setting-hint">Windows vary by car and compound. Tyres outside it are labelled Cold or Hot.</span>
-          </div>
+          )}
         </Card>
 
         <Card title="Automobilista 2 setup">

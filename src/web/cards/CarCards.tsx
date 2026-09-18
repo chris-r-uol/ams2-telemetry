@@ -7,6 +7,7 @@ import { signedPercent, speedIn, speedLabel, temperatureIn, temperatureLabel } f
 import { gearLabel } from '../components/laps.tsx';
 import { useLive } from '../lib/live.ts';
 import { useSettings } from '../lib/settings.ts';
+import { tyreReadings } from '../lib/tyres.ts';
 import { EVENT_ICONS, EventList, LiveCard, type CardSize } from './parts.tsx';
 
 const RANGE = 0.6;
@@ -129,7 +130,9 @@ function MiniBar({ label, value }: { label: string; value: number }) {
 
 export function CarStatusCard({ size }: { size: CardSize }) {
   const frame = useLive((s) => s.frame);
-  const { units, tyreWindow } = useSettings();
+  const session = useLive((s) => s.session);
+  const settings = useSettings();
+  const { units } = settings;
   const title = 'Car';
   const hud = <span className="badge">Also on the game HUD</span>;
 
@@ -141,11 +144,12 @@ export function CarStatusCard({ size }: { size: CardSize }) {
     );
   }
 
-  const [low, high] = tyreWindow;
-  const tyres = WHEELS.map((wheel, i) => {
-    const temp = frame.tyres.tempC[i];
-    return { wheel, temp, state: temp <= 0 ? null : temp > high ? 'hot' : temp < low ? 'cold' : null };
-  });
+  const readings = tyreReadings(frame, session, settings);
+  const tyres = WHEELS.map((wheel, i) => ({
+    wheel,
+    temp: readings[i].temp,
+    state: readings[i].state === 'cold' || readings[i].state === 'hot' ? readings[i].state : null,
+  }));
   const issues = tyres.filter((t) => t.state).map((t) => `${t.wheel} tyre ${t.state}`);
   if (frame.fuel.lapsRemaining !== null && frame.fuel.lapsRemaining < 2) {
     issues.push(`Fuel for ${frame.fuel.lapsRemaining.toFixed(1)} laps`);

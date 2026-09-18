@@ -29,6 +29,7 @@ import type { LiveReferenceDto } from '../lib/api.ts';
 import { getLive, getTrail, subscribeLive, useLive } from '../lib/live.ts';
 import { href } from '../lib/router.ts';
 import { useSettings, type Settings } from '../lib/settings.ts';
+import { tyreReadings } from '../lib/tyres.ts';
 
 const FLAG_LABELS: Partial<Record<FlagColour, string>> = {
   blue: 'Blue flag',
@@ -229,12 +230,12 @@ const WHEELS = [
 
 function Tyres({ frame, settings }: { frame: LiveFrame; settings: Settings }) {
   const { units } = settings;
-  const [low, high] = settings.tyreWindow;
+  const session = useLive((s) => s.session);
+  const readings = tyreReadings(frame, session, settings);
   return (
     <div className="tyres" role="group" aria-label="Tyres">
       {WHEELS.map(([short, name], i) => {
-        const temp = frame.tyres.tempC[i];
-        const state = temp <= 0 ? null : temp < low ? 'cold' : temp > high ? 'hot' : 'ok';
+        const { temp, state } = readings[i];
         const pressure = pressureIn(frame.tyres.pressureKPa[i], units.pressure);
         return (
           <div key={short} className={`tyre ${state ? `is-${state}` : ''}`}>

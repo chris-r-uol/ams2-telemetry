@@ -12,7 +12,9 @@ export interface Settings {
   mirrorMap: boolean;
   /** Announce completed laps to screen readers. */
   announceLaps: boolean;
-  /** Tyre temperature window, °C. Outside it the tyre gets flagged. */
+  /** Judge tyre temperatures against where they usually run this session, or against a fixed window. */
+  tyreWindowMode: 'auto' | 'fixed';
+  /** Fixed tyre temperature window, °C. Outside it the tyre gets flagged. */
   tyreWindow: [number, number];
 }
 
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   units: DEFAULT_UNITS,
   mirrorMap: false,
   announceLaps: true,
+  tyreWindowMode: 'auto',
   tyreWindow: [80, 100],
 };
 

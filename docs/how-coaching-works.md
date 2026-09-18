@@ -92,6 +92,12 @@ Thresholds live in [`src/shared/analysis/coach.ts`](../src/shared/analysis/coach
   at the same corner. Fixing a habit is worth more than fixing a one-off.
 - **Consistency**: the standard deviation of clean lap times within 107% of your best.
 
+Contact and spins are left out of habits, each corner's typical time and consistency:
+a run through a corner where you were hit or spun isn't a habit, and one spin would swamp
+an average. They're found the same way as on the Car setup page (sideways acceleration no
+cornering or braking could produce, or the car more than 25° sideways), with a margin of
+1 s before and 3 s after. Running wide isn't left out: that is a habit worth knowing about.
+
 ## 7. Grip used
 
 Coaches plot a **g-g diagram** (the friction circle): cornering g across, braking and

@@ -7,6 +7,7 @@ import {
   chassisLapSeries,
   incidentMask,
   incidentRanges,
+  sessionIncidents,
   type ChassisAnalysis,
   type ChassisLapSeries,
 } from '../shared/analysis/chassis.ts';
@@ -150,7 +151,8 @@ export class AnalysisService {
     const laps = session.laps
       .map((summary) => this.lap(sessionId, summary.lap))
       .filter((lap): lap is AnalysedLap => lap !== null);
-    const insights = analyseSession(laps);
+    // Spins and contact come from the raw traces: they need the sideways velocity and the full rate of samples.
+    const insights = analyseSession(laps, undefined, sessionIncidents(this.storedLaps(session)));
     const result = { insights, corners: insights.corners.map((c) => c.corner) };
     this.insightCache.set(sessionId, { updatedAt: session.updatedAt, lapCount: session.laps.length, result });
     return result;

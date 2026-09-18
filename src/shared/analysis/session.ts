@@ -53,7 +53,17 @@ export function coachableLaps(laps: readonly AnalysedLap[]): AnalysedLap[] {
   );
 }
 
-export function analyseSession(allLaps: AnalysedLap[], cornersOverride?: Corner[]): SessionInsights {
+/**
+ * `incidents` are distance ranges of each lap near a spin or contact, by lap number. A run
+ * through a corner that overlaps one is left out of habits and the corner's typical time,
+ * and a lap with one is left out of consistency: being hit isn't a habit, and one spin
+ * would swamp the average. Running wide isn't an incident here: that is a habit.
+ */
+export function analyseSession(
+  allLaps: AnalysedLap[],
+  cornersOverride?: Corner[],
+  incidents: Map<number, [number, number][]> = new Map(),
+): SessionInsights {
   const laps = coachableLaps(allLaps);
   const empty: SessionInsights = {
     lapsAnalysed: laps.length,
@@ -70,20 +80,27 @@ export function analyseSession(allLaps: AnalysedLap[], cornersOverride?: Corner[
   const best = laps.reduce((a, b) => (b.summary.lapTime! < a.summary.lapTime! ? b : a));
   const corners = cornersOverride ?? detectCorners(best.resampled);
   const metrics: CornerMetrics[][] = laps.map((l) => corners.map((c) => cornerMetrics(l.resampled, c)));
+  const disturbed = laps.map((l) => {
+    const ranges = incidents.get(l.summary.lap) ?? [];
+    return corners.map((c) => ranges.some(([from, to]) => c.ranges.some(([a, b]) => from < b && to > a)));
+  });
 
   const cornerInsights: CornerInsight[] = corners.map((corner, ci) => {
     const times = metrics.map((m) => m[ci].segmentTime);
-    let bestIndex = 0;
+    const clean = times.filter((_, li) => !disturbed[li][ci]);
+    const typical = clean.length ? clean : times;
+    // Your best run through the corner is a clean one, if there is one.
+    let bestIndex = -1;
     times.forEach((t, i) => {
-      if (t < times[bestIndex]) bestIndex = i;
+      if ((clean.length === 0 || !disturbed[i][ci]) && (bestIndex < 0 || t < times[bestIndex])) bestIndex = i;
     });
     const bestLapIndex = laps.indexOf(best);
     return {
       corner,
       bestTime: times[bestIndex],
       bestLap: laps[bestIndex].summary.lap,
-      meanTime: mean(times),
-      stdDev: stdDev(times),
+      meanTime: mean(typical),
+      stdDev: stdDev(typical),
       potential: Math.max(0, times[bestLapIndex] - times[bestIndex]),
     };
   });
@@ -105,7 +122,10 @@ export function analyseSession(allLaps: AnalysedLap[], cornersOverride?: Corner[
     .filter((t): t is CoachTip => t !== null)
     .sort((a, b) => b.timeLost - a.timeLost);
 
-  const lapTimes = laps.map((l) => l.summary.lapTime!).filter((t) => t <= best.summary.lapTime! * 1.07);
+  const withoutIncidents = laps.filter((l) => !(incidents.get(l.summary.lap)?.length ?? 0));
+  const lapTimes = (withoutIncidents.length >= 2 ? withoutIncidents : laps)
+    .map((l) => l.summary.lapTime!)
+    .filter((t) => t <= best.summary.lapTime! * 1.07);
 
   return {
     lapsAnalysed: laps.length,
@@ -115,7 +135,7 @@ export function analyseSession(allLaps: AnalysedLap[], cornersOverride?: Corner[
     consistency: lapTimes.length >= 2 ? { meanTime: mean(lapTimes), stdDev: stdDev(lapTimes), laps: lapTimes.length } : null,
     corners: cornerInsights,
     focus,
-    habits: findHabits(laps, corners, metrics, cornerInsights),
+    habits: findHabits(laps, corners, metrics, cornerInsights, disturbed),
   };
 }
 
@@ -124,21 +144,25 @@ function findHabits(
   corners: Corner[],
   metrics: CornerMetrics[][],
   insights: CornerInsight[],
+  disturbed: boolean[][],
 ): Habit[] {
   if (laps.length < 3) return [];
   const habits: Habit[] = [];
   corners.forEach((corner, ci) => {
     const refIndex = metrics.findIndex((m) => m[ci].segmentTime === insights[ci].bestTime);
     const byKind = new Map<TipKind, CoachTip[]>();
+    let judged = 0;
     laps.forEach((_, li) => {
-      if (li === refIndex) return;
+      if (li === refIndex || disturbed[li][ci]) return;
+      judged++;
       const timeLost = metrics[li][ci].segmentTime - metrics[refIndex][ci].segmentTime;
       for (const tip of tipsForCorner(corner, metrics[li][ci], metrics[refIndex][ci], timeLost)) {
         if (tip.kind === 'general') continue;
         byKind.set(tip.kind, [...(byKind.get(tip.kind) ?? []), tip]);
       }
     });
-    const outOf = laps.length - 1;
+    const outOf = judged;
+    if (outOf < 2) return;
     for (const [kind, tips] of byKind) {
       if (tips.length >= Math.max(2, Math.ceil(outOf * 0.4))) {
         habits.push({

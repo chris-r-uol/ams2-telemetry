@@ -408,15 +408,22 @@ export function bodySlipAngle(vLat: number, vLon: number, velocityAxesSwapped: b
  * Spins, contact and trips off the track, with a margin either side. They say
  * nothing about the setup, so they're left out of calibration and patterns.
  * Contact shows up as horizontal acceleration the car can't corner or brake with.
+ * `offTrack: false` leaves trips off the track in, for driving coaching, where
+ * running wide is something to work on rather than noise.
  */
-export function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): boolean[] {
+export function incidentMask(
+  tr: LapTrace,
+  impactG: number,
+  velocityAxesSwapped: boolean,
+  { offTrack = true }: { offTrack?: boolean } = {},
+): boolean[] {
   const n = tr.t.length;
   const vLat = channel(tr, 'vLat');
   const vLon = channel(tr, 'vLon');
   const off = channel(tr, 'off');
   const trigger = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
-    if (Math.abs(tr.latG[i]) > impactG || Math.abs(tr.lonG[i]) > impactG || (off?.[i] ?? 0) >= 2) {
+    if (Math.abs(tr.latG[i]) > impactG || Math.abs(tr.lonG[i]) > impactG || (offTrack && (off?.[i] ?? 0) >= 2)) {
       trigger[i] = true;
     } else if (vLat && vLon && tr.speed[i] >= 5) {
       trigger[i] = bodySlipAngle(vLat[i], vLon[i], velocityAxesSwapped) > CHASSIS.spinSlipAngle;
@@ -436,9 +443,54 @@ export function incidentMask(tr: LapTrace, impactG: number, velocityAxesSwapped:
   return mask;
 }
 
+/**
+ * What incident detection needs to know about a session: which local velocity axis
+ * is sideways, and the horizontal acceleration beyond which it's contact rather than
+ * cornering or braking (twice what the car usually reaches, and never under 5 g).
+ */
+export function incidentCalibration(traces: LapTrace[]): { velocityAxesSwapped: boolean; impactG: number } {
+  const speedSample: number[] = [];
+  const lat: number[] = [];
+  const lon: number[] = [];
+  for (const trace of traces) {
+    const vLat = channel(trace, 'vLat');
+    const vLon = channel(trace, 'vLon');
+    if (!vLat || !vLon) continue;
+    for (let i = 0; i < trace.t.length; i += 17) {
+      speedSample.push(trace.speed[i]);
+      lat.push(Math.abs(vLat[i]));
+      lon.push(Math.abs(vLon[i]));
+    }
+  }
+  const velocityAxesSwapped = correlation(lat, speedSample) > correlation(lon, speedSample) + 0.1;
+
+  const horizontal: number[] = [];
+  for (const trace of traces) {
+    for (let i = 0; i < trace.t.length; i += 3) {
+      if (trace.speed[i] >= CHASSIS.minSpeed) horizontal.push(Math.max(Math.abs(trace.latG[i]), Math.abs(trace.lonG[i])));
+    }
+  }
+  const usualLimit = horizontal.length > 100 ? percentile(Float64Array.from(horizontal).sort(), 0.99) : 0;
+  return { velocityAxesSwapped, impactG: Math.max(5, 2 * usualLimit) };
+}
+
+/** Distance ranges of each lap near a spin or contact, keyed by lap number. Trips off the track aren't included. */
+export function sessionIncidents(laps: ChassisLap[]): Map<number, [number, number][]> {
+  const usable = laps.filter((l) => l.trace.t.length > 50 && l.summary.kind !== 'partial');
+  const { impactG, velocityAxesSwapped } = incidentCalibration(usable.map((l) => l.trace));
+  return new Map(
+    laps.map((l) => [l.summary.lap, incidentRanges(l.trace, impactG, velocityAxesSwapped, { offTrack: false })]),
+  );
+}
+
 /** Distance ranges of a lap near a spin or contact, from `incidentMask`. */
-export function incidentRanges(tr: LapTrace, impactG: number, velocityAxesSwapped: boolean): [number, number][] {
-  const mask = incidentMask(tr, impactG, velocityAxesSwapped);
+export function incidentRanges(
+  tr: LapTrace,
+  impactG: number,
+  velocityAxesSwapped: boolean,
+  options: { offTrack?: boolean } = {},
+): [number, number][] {
+  const mask = incidentMask(tr, impactG, velocityAxesSwapped, options);
   const ranges: [number, number][] = [];
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
@@ -597,31 +649,7 @@ export function calibrate(laps: ChassisLap[]): { availability: ChannelAvailabili
   }
   const damperSign: 1 | -1 = agreement < 0 ? -1 : 1;
 
-  // Which local velocity axis is longitudinal?
-  const speedSample: number[] = [];
-  const lat: number[] = [];
-  const lon: number[] = [];
-  for (const trace of traces) {
-    const vLat = channel(trace, 'vLat');
-    const vLon = channel(trace, 'vLon');
-    if (!vLat || !vLon) continue;
-    for (let i = 0; i < trace.t.length; i += 17) {
-      speedSample.push(trace.speed[i]);
-      lat.push(Math.abs(vLat[i]));
-      lon.push(Math.abs(vLon[i]));
-    }
-  }
-  const velocityAxesSwapped = correlation(lat, speedSample) > correlation(lon, speedSample) + 0.1;
-
-  // Contact shows up as acceleration far beyond what this car corners or brakes with.
-  const horizontal: number[] = [];
-  for (const trace of traces) {
-    for (let i = 0; i < trace.t.length; i += 3) {
-      if (trace.speed[i] >= CHASSIS.minSpeed) horizontal.push(Math.max(Math.abs(trace.latG[i]), Math.abs(trace.lonG[i])));
-    }
-  }
-  const usualLimit = horizontal.length > 100 ? percentile(Float64Array.from(horizontal).sort(), 0.99) : 0;
-  const impactG = Math.max(5, 2 * usualLimit);
+  const { velocityAxesSwapped, impactG } = incidentCalibration(traces);
   const incidents = traces.map((trace) => incidentMask(trace, impactG, velocityAxesSwapped));
 
   // Steering a neutral car needs, from steady cornering: off the brakes and without hard acceleration.
