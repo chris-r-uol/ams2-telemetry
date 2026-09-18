@@ -36,12 +36,21 @@ export function ConnectionBadge() {
   const receiving = useLive((s) => s.frame?.receiving ?? false);
   const gameState = useLive((s) => s.frame?.gameState ?? null);
   const source = useLive((s) => s.status?.source ?? null);
+  const paused = useLive((s) => s.status?.paused ?? false);
 
   if (connection !== 'open') {
     return (
       <span className="badge badge-bad" role="status">
         <span aria-hidden="true">{'○'}</span>
         {connection === 'connecting' ? 'Connecting…' : 'Server offline, retrying'}
+      </span>
+    );
+  }
+  if (paused) {
+    return (
+      <span className="badge" role="status">
+        <span aria-hidden="true">{'❚❚'}</span>
+        {source === 'demo' ? 'Demo paused' : 'Replay paused'}
       </span>
     );
   }

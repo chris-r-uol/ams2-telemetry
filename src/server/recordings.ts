@@ -69,7 +69,9 @@ export function linkRecordings(recordings: RecordingInfo[], sessions: SessionMet
         s.startedAt <= end &&
         (!recording.track || plain(recording.track) === plain(`${s.track.location}${s.track.variation}`)),
     );
-    return { ...recording, sessionId: match?.id ?? null };
+    // A recording copied without its details file doesn't know its track: its session does.
+    const track = recording.track ?? (match ? [match.track.location, match.track.variation].filter(Boolean).join(' ') : null);
+    return { ...recording, sessionId: match?.id ?? null, track };
   });
 }
 

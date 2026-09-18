@@ -25,7 +25,7 @@ Node's built-in type stripping, so there's no server build step.
 | `npm test` | unit and end-to-end pipeline tests |
 | `npm run typecheck` | TypeScript |
 | `npm run check` | typecheck, test and build: run this before a pull request |
-| `npm run screenshots` | regenerate README images (needs Google Chrome installed) |
+| `npm run screenshots` | regenerate README images from the recordings in `test_data/`, or a folder you pass (needs Google Chrome installed) |
 
 ## Project layout
 
