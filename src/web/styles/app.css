@@ -2814,3 +2814,80 @@ code {
   font-size: 0.875rem;
 }
 
+/* ============ Trail braking (string theory) ============ */
+
+.st-plots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+}
+
+.st-plot {
+  margin: 0;
+  min-width: 0;
+}
+
+.st-plot svg {
+  display: block;
+  overflow: visible;
+}
+
+/* In a Live grid cell the glance plots take whatever height the card has left. */
+.st-card .st-plots {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.st-card .st-plot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.st-card .st-plot > div {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.st-plot-title {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.2rem;
+}
+
+.st-frame {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+}
+
+/* The string: the diagonal a driver trading pedal for lock would trace. */
+.st-string {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+.st-key-string {
+  color: var(--ink-muted);
+  border-top-style: dashed;
+  border-top-width: 2px;
+}
+
+.st-facts {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.st-facts dt {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.st-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+

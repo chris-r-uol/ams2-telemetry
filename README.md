@@ -99,17 +99,20 @@ The Live page is a grid of cards, three wide and two high, so a whole preset fit
 screen. Every card comes in a **glance** size (one cell) and a **full** size (two cells wide):
 the last corner with its speed, balance and throttle and brake strips, your line and steering
 through it against your best run, a grip circle showing how much of the car's grip you used
-through it, how you used the brake and throttle, the next corner, corner-by-corner time, live
+through it, how you used the brake and throttle, how the brake and throttle traded off
+against the steering (trail braking), the next corner, corner-by-corner time, live
 balance, grip events, delta, lap trend, car status and the track map. Start from the Focus, Optimisation and Full presets,
 then choose **Edit layout** to add, resize or swap cards and save your own. Press
 <kbd>1</kbd>–<kbd>9</kbd> to switch between them. The **Card lab** page shows every card in
 both sizes.
 
-Between the Optimisation preset at the top of this page and the three below, every card appears.
+Between the Optimisation preset at the top of this page and the four below, every card appears.
 
 <img src="docs/images/live-focus.png" alt="The Focus preset: glance-size cards for the delta (green, faster than the reference), the next corner (T2, with the distance to your best braking point and the cue 'Carry more speed'), the last corner (T1, 0.14 seconds faster, neutral on entry, understeer mid-corner, oversteer on exit), the one thing to focus on this lap (carry more speed at T2, worth about 1.15 seconds) and the car, with nothing needing attention." width="100%">
 
 <img src="docs/images/live-full.png" alt="The Full preset: a full-size Last corner card for T1 with its speed trace and balance, throttle and brake strips, the Next corner card for T2, a Grip this lap card listing two moments of wheelspin, a Lap trend card saying the last lap was 1.23 seconds slower and the pace is dropping off, and the Car card with nothing needing attention." width="100%">
+
+<img src="docs/images/live-braking.png" alt="A Braking preset built with Edit layout. The full-size Trail braking card plots brake against steering into T1 and throttle against steering out of it, each over the best run, with the dashed diagonal 'string' showing brake coming off as the lock goes on and throttle going down as it comes off, and a table of where the brake came fully off, the most brake with half the lock on, how much lock was still on when flat out and the most throttle at nearly full lock. Beside it the same card at glance size, and below, glance-size Brake and throttle, Last corner steering and Last corner cards." width="100%">
 
 <img src="docs/images/live-technique.png" alt="A Technique preset built with Edit layout. Last corner steering draws your line through T1 over your best run's, with steering as blue-to-red strips. Last corner grip shows a friction circle with 86% of the available grip used against 84% on the best run, the most grip left off the pedals before the apex, and purple strips of unused grip along the corner. Brake and throttle plots both pedals through T1 against the best run and compares brake application, release, trail, pickup to flat out, backing off and throttle while adding lock, noting that you came off the brake more abruptly than on your best run. The Track map card marks the corners that cost the most time last lap in red." width="100%">
 

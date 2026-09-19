@@ -1,11 +1,12 @@
 /**
- * Gearing, track use and pedal technique, on laps built to show each thing.
+ * Gearing, track use, pedal technique and trail braking, on laps built to show each thing.
  */
 import { describe, expect, it } from 'vitest';
 import type { Corner } from '../src/shared/analysis/corners.ts';
 import { analyseGearing, heldGears } from '../src/shared/analysis/gearing.ts';
 import { cornerPedals, fullThrottleShare } from '../src/shared/analysis/pedals.ts';
 import { resampleByDistance } from '../src/shared/analysis/resample.ts';
+import { stringTheory } from '../src/shared/analysis/string-theory.ts';
 import { analyseTrackUse } from '../src/shared/analysis/track-use.ts';
 import { emptyTrace, type LapSummary, type LapTrace } from '../src/shared/model/types.ts';
 
@@ -172,5 +173,41 @@ describe('pedal technique', () => {
     expect(p.throttle.toFull).toBeCloseTo(1.5, 1);
     expect(p.throttle.hesitations).toBe(1);
     expect(fullThrottleShare(lap)).toBeCloseTo(5.5 / 12, 1);
+  });
+});
+
+describe('trail braking (string theory)', () => {
+  // A corner in 60 points: braking straight, turning in, most lock at point 30, then unwinding.
+  const corner = (brakeAt: (i: number) => number, throttleAt: (i: number) => number) => {
+    const steering = Array.from({ length: 60 }, (_, i) => (i < 10 ? 0 : i <= 30 ? -0.4 * ((i - 10) / 20) : -0.4 * (1 - (i - 30) / 25)));
+    return stringTheory(
+      steering.map((s) => Math.min(0, s)),
+      steering.map((_, i) => brakeAt(i)),
+      steering.map((_, i) => throttleAt(i)),
+    )!;
+  };
+
+  it('reads the string being followed: brake off at full lock, flat out as the wheel straightens', () => {
+    const s = corner(
+      (i) => (i < 10 ? 1 : i <= 30 ? 1 - (i - 10) / 20 : 0),
+      (i) => (i < 30 ? 0 : Math.min(1, (i - 30) / 25)),
+    );
+    expect(s.lock).toBeCloseTo(0.4, 1);
+    expect(s.entry!.brakeOffAt).toBeGreaterThan(0.9);
+    expect(s.entry!.offString).toBeLessThan(0.05);
+    expect(s.exit!.flatOutAt).toBeLessThan(0.1);
+    expect(s.exit!.offString).toBeLessThan(0.1);
+  });
+
+  it('spots the brake coming off before turn-in, and heavy braking with lock', () => {
+    const early = corner((i) => (i < 9 ? 1 : 0), () => 0);
+    expect(early.entry!.brakeOffAt).toBeLessThan(0.05);
+    const late = corner((i) => (i <= 28 ? 1 : 0), () => 0);
+    expect(late.entry!.heavyWithLock).toBe(1);
+    expect(late.exit!.flatOutAt).toBeNull();
+  });
+
+  it("doesn't read a corner taken with hardly any steering", () => {
+    expect(stringTheory([0.01, 0.02, 0.01], [1, 0, 0], [0, 1, 1])).toBeNull();
   });
 });

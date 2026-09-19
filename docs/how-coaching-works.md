@@ -160,6 +160,34 @@ It also shows the share of the last lap spent flat out against your best lap, an
 out the one difference from your best run most worth knowing about. The analysis lives
 in [`src/shared/analysis/pedals.ts`](../src/shared/analysis/pedals.ts).
 
+## 9. Trail braking: string theory
+
+Coaches describe trail braking with a string tied from the steering wheel to the brake
+pedal: as you turn in, the string pulls the brake off, so the tyres are never asked to
+brake hard and turn hard at the same time. A second string ties the wheel to the
+throttle on the way out: as the lock comes off, the throttle goes down.
+
+The **Trail braking** card plots it for every corner, against your best run through it:
+
+- **In:** brake against steering, from the first touch of the brake to the most lock in
+  the corner. Steering is a share of that most lock. Following the string traces the
+  diagonal from full brake with no lock to no brake at full lock. Straight-line braking
+  runs down the left edge first, which is fine.
+- **Out:** throttle against steering, from the most lock until flat out with the wheel
+  straight. Following the string traces the diagonal from no throttle at full lock to
+  full throttle with no lock.
+
+| Measure | Meaning |
+|---|---|
+| Brake fully off | share of the lock on when the brake came off (under 5%); 0 means before turning in |
+| Most brake with half the lock on | too much here asks the front tyres for braking and turning at once |
+| Flat out | share of the lock still on when the throttle reached 95% |
+| Most throttle at 80%+ lock | throttle fed in before the wheel starts to unwind |
+
+Steering is smoothed over about 10 m, so a quick correction isn't read as the corner's
+lock. The analysis lives in
+[`src/shared/analysis/string-theory.ts`](../src/shared/analysis/string-theory.ts).
+
 ## Limitations
 
 - Corners are numbered in the order they're detected (T1, T2, …), which may not match

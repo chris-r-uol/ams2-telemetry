@@ -57,6 +57,11 @@ const PRESETS = [
     name: 'Technique',
     placements: [full('corner-steering', 0, 0), glance('corner-grip', 0, 2), full('pedals', 1, 0), glance('track-map', 1, 2)],
   },
+  {
+    id: 'braking',
+    name: 'Braking',
+    placements: [full('trail-braking', 0, 0), glance('trail-braking', 0, 2), glance('pedals', 1, 0), glance('corner-steering', 1, 1), glance('last-corner', 1, 2)],
+  },
 ];
 
 // ---------------------------------------------------------------- data
@@ -260,6 +265,7 @@ try {
     open('#/live', { preset: 'focus' }).then((s) => ({ ...s, name: 'live-focus' })),
     open('#/live', { preset: 'full' }).then((s) => ({ ...s, name: 'live-full' })),
     open('#/live', { preset: 'technique' }).then((s) => ({ ...s, name: 'live-technique' })),
+    open('#/live', { preset: 'braking' }).then((s) => ({ ...s, name: 'live-braking' })),
     open('#/live', { preset: 'full', theme: 'light' }).then((s) => ({ ...s, name: 'live-light' })),
     open('#/live', { preset: 'focus', width: 390, height: 844, scale: 3 }).then((s) => ({ ...s, name: 'live-phone' })),
   ]);

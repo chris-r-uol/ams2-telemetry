@@ -10,6 +10,7 @@ import { CornerGripCard } from './GripCard.tsx';
 import { PedalCard } from './PedalCard.tsx';
 import type { CardSize } from './parts.tsx';
 import { CornerSteeringCard } from './SteeringCard.tsx';
+import { TrailBrakingCard } from './StringCard.tsx';
 import { TrackMapCard } from './TrackMapCard.tsx';
 
 export type CardId =
@@ -25,7 +26,8 @@ export type CardId =
   | 'corner-steering'
   | 'corner-grip'
   | 'track-map'
-  | 'pedals';
+  | 'pedals'
+  | 'trail-braking';
 
 export type CardKind = 'insight' | 'timing' | 'hud';
 
@@ -154,6 +156,15 @@ export const CARDS: CardDefinition[] = [
     name: 'Brake and throttle',
     Component: PedalCard,
     what: "How you used the pedals through the corner you just drove, against your best run: how quickly the brake reached its peak, how it came off and trailed into the turn, how long from picking up the throttle to flat out, and whether it wavered or went in while you were still adding steering. Plus how much of the last lap was flat out. Uses the pedal itself, so the game's blips on downshifts don't count.",
+    updates: 'Once per corner, as you exit',
+    kind: 'insight',
+  },
+  {
+    id: 'trail-braking',
+    letter: 'N',
+    name: 'Trail braking',
+    Component: TrailBrakingCard,
+    what: "\"String theory\" for the corner you just drove: brake against steering on the way in, throttle against steering on the way out, over your best run. Imagine a string from the wheel to the pedal: as the lock goes on it pulls the brake off, and as the lock comes off it lets the throttle down. The dashed diagonal is that string. Shows where the brake came off, how much brake was still on with half the lock, and how much lock was left when you went flat out.",
     updates: 'Once per corner, as you exit',
     kind: 'insight',
   },
