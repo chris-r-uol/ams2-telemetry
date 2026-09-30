@@ -180,6 +180,12 @@ export interface LiveEvent {
   wheel: Wheel | null;
   corner: string | null;
   distance: number;
+  /** Where it ended, metres. */
+  until: number;
+  /** Seconds. */
+  duration: number;
+  /** Most extreme value, as on the chassis event. For a lock-up, the wheel's slip: −1 is a wheel that stopped turning. */
+  peak: number;
   lap: number;
 }
 

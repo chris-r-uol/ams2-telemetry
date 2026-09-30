@@ -256,6 +256,9 @@ export class LiveCoach {
       wheel: e.wheel,
       corner: corner.name,
       distance: e.distance,
+      until: e.until,
+      duration: e.duration,
+      peak: e.peak,
       lap,
     }));
 

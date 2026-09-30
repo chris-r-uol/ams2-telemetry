@@ -1,15 +1,16 @@
 /**
  * Brake and throttle technique through the corner you just drove, against your
  * best run: how quickly the brake reaches its peak, how it comes off and trails
- * into the turn, and how the throttle goes back in. Uses the pedal itself, so the
- * game's blips on downshifts don't show.
+ * into the turn, how the throttle goes back in, and where the brakes locked.
+ * Uses the pedal itself, so the game's blips on downshifts don't show.
  */
 import { useRef } from 'react';
 import type { PedalTechnique } from '../../shared/analysis/pedals.ts';
+import { describeLockUps, lockUpMoments, type LockUpMoment } from '../../shared/format.ts';
 import type { CornerProfile } from '../../shared/model/types.ts';
 import { useLive } from '../lib/live.ts';
-import { useElementWidth } from '../lib/useElementWidth.ts';
-import { LiveCard, type CardSize } from './parts.tsx';
+import { fitsHeight, useElementSize } from '../lib/useElementSize.ts';
+import { EVENT_ICONS, LiveCard, type CardSize } from './parts.tsx';
 
 type Series = (number | null)[];
 
@@ -73,9 +74,32 @@ function standout(run: PedalTechnique, best: PedalTechnique | null): string | nu
   return null;
 }
 
+/** Whether the brakes locked through the corner, and where: said in words, since the trace marks alone are colour. */
+function LockUpLine({ moments, apex, corner, ready }: { moments: LockUpMoment[]; apex: number; corner: string; ready: boolean }) {
+  const text = describeLockUps(moments, apex);
+  if (text) {
+    return (
+      <p className="pc-lock has-lock">
+        <span className="event-icon" aria-hidden="true">
+          {EVENT_ICONS['lock-up']}
+        </span>
+        <span>
+          <strong>{text.title}:</strong> {text.detail}
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p className="pc-lock muted">
+      {ready ? `No lock-ups through ${corner}` : 'Lock-up checks start after a little straight-line running.'}
+    </p>
+  );
+}
+
 export function PedalCard({ size }: { size: CardSize }) {
   const report = useLive((s) => s.insights?.lastCorner ?? null);
   const lapPedals = useLive((s) => s.insights?.lapPedals ?? null);
+  const lockChecks = useLive((s) => s.insights?.gripReady ?? false);
   const title = 'Brake and throttle';
 
   if (!report) {
@@ -138,12 +162,26 @@ export function PedalCard({ size }: { size: CardSize }) {
       </p>
     ) : null;
 
+  const lockUps = lockUpMoments(report.events ?? []);
+  const lockLine = <LockUpLine moments={lockUps} apex={report.profile.apex} corner={report.corner} ready={lockChecks} />;
+  const traces = (
+    <PedalTraces
+      profile={report.profile}
+      run={pedals.run}
+      best={pedals.best}
+      bestLabel={bestLabel}
+      corner={report.corner}
+      lockUps={lockUps}
+      size={size}
+    />
+  );
+
   if (size === 'glance') {
+    // Read at a glance from the driving seat: the traces, and one short note. A lock-up comes first.
     return (
-      <LiveCard title={title} size={size} meta={report.corner}>
-        {table}
-        {note && <p className="pc-note">{note}</p>}
-        {lapLine}
+      <LiveCard title={title} size={size} meta={report.corner} className="pc-card">
+        {traces}
+        {lockUps.length > 0 ? lockLine : note && <p className="pc-note">{note}</p>}
       </LiveCard>
     );
   }
@@ -151,8 +189,9 @@ export function PedalCard({ size }: { size: CardSize }) {
   return (
     <LiveCard title={title} size={size} meta={`${report.corner} · lap ${report.lap}`}>
       <div className="cl-split">
-        <PedalTraces profile={report.profile} run={pedals.run} best={pedals.best} bestLabel={bestLabel} corner={report.corner} />
+        {traces}
         <div className="cl-side">
+          {lockLine}
           {table}
           {note && <p className="pc-note">{note}</p>}
           {lapLine}
@@ -165,22 +204,33 @@ export function PedalCard({ size }: { size: CardSize }) {
   );
 }
 
-/** Brake and throttle along the corner, this run over your best run. */
+/** Panel heights for the traces: full size, glance size, and the range a glance card in a Live grid cell fits them to. */
+const PANEL_HEIGHT = { full: 72, glance: 64, least: 26, most: 160 } as const;
+
+/**
+ * Brake and throttle along the corner, this run over your best run, with any lock-ups
+ * shaded on the brake panel. At glance size in a Live grid cell the panels shrink to
+ * the height the card has left.
+ */
 function PedalTraces({
   profile,
   run,
   best,
   bestLabel,
   corner,
+  lockUps,
+  size,
 }: {
   profile: CornerProfile;
   run: PedalTechnique;
   best: PedalTechnique | null;
   bestLabel: string;
   corner: string;
+  lockUps: LockUpMoment[];
+  size: CardSize;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const width = useElementWidth(ref);
+  const { width, height: boxHeight } = useElementSize(ref);
   const panels: { label: string; own: Series; best: Series }[] = [
     { label: 'Brake', own: profile.brake ?? [], best: profile.bestBrake ?? [] },
     { label: 'Throttle', own: profile.throttle ?? [], best: profile.bestThrottle ?? [] },
@@ -188,8 +238,13 @@ function PedalTraces({
   const hasBest = panels.some((p) => p.best.some((v) => v !== null));
   const n = Math.max(...panels.map((p) => p.own.length));
   const pad = { left: 58, right: 8, top: 16 };
-  const panelH = 72;
   const gap = 18;
+  // Everything but the panels themselves: the marker labels above, a gap after each panel and the apex label below.
+  const chrome = pad.top + panels.length * gap + 4;
+  const fit = size === 'glance' && fitsHeight(ref.current);
+  const panelH = fit
+    ? Math.max(PANEL_HEIGHT.least, Math.min(PANEL_HEIGHT.most, Math.floor((boxHeight - chrome) / panels.length)))
+    : PANEL_HEIGHT[size];
   const plotW = Math.max(10, width - pad.left - pad.right);
   const x = (i: number) => pad.left + (n > 1 ? (i / (n - 1)) * plotW : 0);
   const xAt = (d: number) => x((d - profile.from) / profile.step);
@@ -216,21 +271,41 @@ function PedalTraces({
       ? { d: best.turnIn, text: 'Best turns in', className: 'cp-marker-best' }
       : null,
   ].filter((m): m is { d: number; text: string; className: string } => m !== null);
+  const locked = describeLockUps(lockUps, profile.apex);
   const summary =
     `Brake and throttle through ${corner}.` +
     (run.brake ? ` Brake at peak in ${run.brake.toPeak.toFixed(2)} seconds, off over ${run.brake.release.toFixed(2)} seconds.` : ' No braking.') +
-    (run.throttle.toFull !== null ? ` Flat out ${run.throttle.toFull.toFixed(1)} seconds after picking up the throttle.` : '');
+    (run.throttle.toFull !== null ? ` Flat out ${run.throttle.toFull.toFixed(1)} seconds after picking up the throttle.` : '') +
+    (locked ? ` ${locked.title}: ${locked.detail}.` : '');
 
   return (
     <figure className="corner-profile">
-      <div ref={ref}>
+      {/* Never shorter than the smallest panels, so a cramped card scrolls rather than drawing over what's below. */}
+      <div ref={ref} style={fit ? { position: 'relative', minHeight: chrome + panels.length * PANEL_HEIGHT.least } : undefined}>
         {width > 0 && n > 2 && (
-          <svg width={width} height={height} role="img" aria-label={summary}>
+          // Out of the flow when fitting, so the chart's own height never stops the card from shrinking it.
+          <svg width={width} height={height} role="img" aria-label={summary} style={fit ? { position: 'absolute', top: 0, left: 0 } : undefined}>
             {panels.map((panel, p) => (
               <g key={panel.label}>
                 {[0, 1].map((v) => (
                   <line key={v} className="cp-grid" x1={pad.left} x2={pad.left + plotW} y1={y(p, v)} y2={y(p, v)} />
                 ))}
+                {p === 0 &&
+                  lockUps.map((m) => {
+                    const from = Math.max(pad.left, xAt(m.from));
+                    const to = Math.min(pad.left + plotW, xAt(m.until));
+                    if (to < pad.left || from > pad.left + plotW) return null;
+                    // A lock-up lasting one or two samples still gets a mark you can see.
+                    const w = Math.max(4, to - from);
+                    return (
+                      <g key={m.from} className="pc-lock-mark">
+                        <rect x={from} y={top(p)} width={w} height={panelH} />
+                        <text x={from + w / 2} y={top(p) + panelH - 4} textAnchor="middle">
+                          {m.wheels.join('+') || EVENT_ICONS['lock-up']}
+                        </text>
+                      </g>
+                    );
+                  })}
                 <text className="cp-axis" x={pad.left - 8} y={top(p) + panelH / 2} textAnchor="end" dominantBaseline="middle">
                   {panel.label}
                 </text>
@@ -270,6 +345,12 @@ function PedalTraces({
           <span className="legend-item">
             <span className="key key-reference" aria-hidden="true" />
             {bestLabel.replace('Best', 'Best run')}
+          </span>
+        )}
+        {lockUps.length > 0 && (
+          <span className="legend-item">
+            <span className="swatch swatch-lock" aria-hidden="true" />
+            Lock-up, by wheel
           </span>
         )}
       </figcaption>

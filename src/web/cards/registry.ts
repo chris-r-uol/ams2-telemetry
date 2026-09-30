@@ -155,7 +155,7 @@ export const CARDS: CardDefinition[] = [
     letter: 'M',
     name: 'Brake and throttle',
     Component: PedalCard,
-    what: "How you used the pedals through the corner you just drove, against your best run: how quickly the brake reached its peak, how it came off and trailed into the turn, how long from picking up the throttle to flat out, and whether it wavered or went in while you were still adding steering. Plus how much of the last lap was flat out. Uses the pedal itself, so the game's blips on downshifts don't count.",
+    what: "How you used the pedals through the corner you just drove, against your best run: brake and throttle traces, with any lock-up shaded on the brake trace by wheel. The glance size is just the traces and one note: where a wheel locked, or the difference from your best run most worth knowing. The full size adds how quickly the brake reached its peak, how it came off and trailed into the turn, how long from picking up the throttle to flat out, whether it wavered or went in while you were still adding steering, and how much of the last lap was flat out. Uses the pedal itself, so the game's blips on downshifts don't count.",
     updates: 'Once per corner, as you exit',
     kind: 'insight',
   },

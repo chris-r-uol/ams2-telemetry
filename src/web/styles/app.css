@@ -2785,6 +2785,51 @@ code {
   font-weight: 600;
 }
 
+/* In a Live grid cell the glance traces take whatever height the card has left. */
+.pc-card .corner-profile {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.pc-card .corner-profile > div {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pc-lock {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.pc-lock.has-lock {
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--warning-wash);
+}
+
+.pc-lock-mark rect {
+  fill: var(--warning-wash);
+  stroke: var(--warning);
+  stroke-width: 1;
+}
+
+.pc-lock-mark text {
+  font-size: 11px;
+  font-weight: 650;
+  fill: var(--warning-ink);
+}
+
+.pc-card .pc-lock-mark text {
+  font-size: 14px;
+}
+
+.swatch-lock {
+  background: var(--warning-wash);
+  box-shadow: inset 0 0 0 1px var(--warning);
+}
+
 /* ============ Car setup: handling, gearing, track use ============ */
 
 .setup-subhead {

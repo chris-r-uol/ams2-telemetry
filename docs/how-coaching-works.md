@@ -160,6 +160,15 @@ It also shows the share of the last lap spent flat out against your best lap, an
 out the one difference from your best run most worth knowing about. The analysis lives
 in [`src/shared/analysis/pedals.ts`](../src/shared/analysis/pedals.ts).
 
+**Lock-ups** are shaded on the brake trace and labelled with the wheel that locked, with a
+note saying which wheel, for how long and how far from the apex, and whether it stopped
+turning completely. A lock-up is a wheel turning at least 15% slower than the car while
+braking ([how it's measured](car-setup.md#lock-ups-and-wheelspin)). Wheels locking within a
+few metres of each other, such as both fronts at once, count as one lock-up. Checks start
+once a little straight-line running has measured each wheel's size. At glance size the card
+is just the traces and one note: the lock-up if there was one, otherwise the difference from
+your best run.
+
 ## 9. Trail braking: string theory
 
 Coaches describe trail braking with a string tied from the steering wheel to the brake

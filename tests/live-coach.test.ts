@@ -12,6 +12,7 @@ import { LiveCoach } from '../src/server/live-coach.ts';
 import { SessionManager } from '../src/server/session-manager.ts';
 import { SessionStore } from '../src/server/storage.ts';
 import { TelemetryHub } from '../src/server/telemetry/hub.ts';
+import { describeLockUps, lockUpMoments } from '../src/shared/format.ts';
 import type { CornerReport } from '../src/shared/model/types.ts';
 
 describe('live coach on the demo car', () => {
@@ -104,6 +105,23 @@ describe('live coach on the demo car', () => {
     const lockUps = insights.events.filter((e) => e.kind === 'lock-up');
     expect(lockUps.length).toBeGreaterThanOrEqual(1);
     expect(lockUps.every((e) => e.wheel === 'FL' && e.corner === nameOf(demo.habits.lateBraking))).toBe(true);
+  });
+
+  it('gives each lock-up its extent, so the brake trace can shade where it happened', () => {
+    const report = reports.find((r) => r.events.some((e) => e.kind === 'lock-up'));
+    expect(report, 'a corner report with a lock-up').toBeDefined();
+    const { from, step, speed, apex } = report!.profile;
+    const end = from + step * (speed.length - 1);
+    for (const e of report!.events.filter((e) => e.kind === 'lock-up')) {
+      expect(e.until).toBeGreaterThanOrEqual(e.distance);
+      expect(e.duration).toBeGreaterThan(0);
+      expect(e.peak).toBeLessThan(-0.15);
+      // Inside the stretch the corner's pedal traces cover.
+      expect(e.distance).toBeGreaterThanOrEqual(from);
+      expect(e.until).toBeLessThanOrEqual(end);
+    }
+    const text = describeLockUps(lockUpMoments(report!.events), apex);
+    expect(text?.detail).toMatch(/^front left, .* before the apex$/);
   });
 
   it('reads live balance while cornering, including understeer', () => {

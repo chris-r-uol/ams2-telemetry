@@ -1,7 +1,9 @@
 /**
- * Gearing, track use, pedal technique and trail braking, on laps built to show each thing.
+ * Gearing, track use, pedal technique, trail braking and lock-ups, on laps built to show each thing.
  */
 import { describe, expect, it } from 'vitest';
+import { describeLockUps, lockUpMoments, wheelsInWords } from '../src/shared/format.ts';
+import type { LiveEvent } from '../src/shared/model/types.ts';
 import type { Corner } from '../src/shared/analysis/corners.ts';
 import { analyseGearing, heldGears } from '../src/shared/analysis/gearing.ts';
 import { cornerPedals, fullThrottleShare } from '../src/shared/analysis/pedals.ts';
@@ -209,5 +211,50 @@ describe('trail braking (string theory)', () => {
 
   it("doesn't read a corner taken with hardly any steering", () => {
     expect(stringTheory([0.01, 0.02, 0.01], [1, 0, 0], [0, 1, 1])).toBeNull();
+  });
+});
+
+describe('lock-ups', () => {
+  const lock = (wheel: LiveEvent['wheel'], distance: number, until: number, duration = 0.2, peak = -0.4): LiveEvent => ({
+    kind: 'lock-up',
+    wheel,
+    corner: 'T1',
+    distance,
+    until,
+    duration,
+    peak,
+    lap: 3,
+  });
+
+  it('treats wheels locking together as one moment, and separate stops as more', () => {
+    const events = [lock('FR', 104, 112), lock('FL', 100, 110, 0.3), { ...lock('RL', 105, 106), kind: 'wheelspin' as const }, lock('FL', 150, 152)];
+    const moments = lockUpMoments(events);
+    expect(moments).toHaveLength(2);
+    expect(moments[0]).toMatchObject({ wheels: ['FL', 'FR'], from: 100, until: 112, duration: 0.3 });
+    expect(moments[1].wheels).toEqual(['FL']);
+  });
+
+  it('names the wheels the way you would say them', () => {
+    expect(wheelsInWords(['FL'])).toBe('front left');
+    expect(wheelsInWords(['FL', 'FR'])).toBe('both fronts');
+    expect(wheelsInWords(['FR', 'RL'])).toBe('front right and rear left');
+    expect(wheelsInWords(['FL', 'FR', 'RR'])).toBe('both fronts and rear right');
+    expect(wheelsInWords(['FL', 'FR', 'RL', 'RR'])).toBe('all four wheels');
+  });
+
+  it('says which wheel, how long and where, or nothing when the brakes never locked', () => {
+    expect(describeLockUps([], 200)).toBeNull();
+    expect(describeLockUps(lockUpMoments([lock('FL', 158, 170, 0.34)]), 200)).toEqual({
+      title: 'Lock-up',
+      detail: 'front left, 0.3 s, 40 m before the apex',
+    });
+    expect(describeLockUps(lockUpMoments([lock('RR', 198, 202, 0.06, -1)]), 200)).toEqual({
+      title: 'Lock-up',
+      detail: 'rear right, fully locked, under 0.1 s, at the apex',
+    });
+    expect(describeLockUps(lockUpMoments([lock('FL', 120, 130), lock('FR', 180, 185, 0.5)]), 200)).toEqual({
+      title: '2 lock-ups',
+      detail: 'both fronts, longest 0.5 s, first 80 m before the apex',
+    });
   });
 });

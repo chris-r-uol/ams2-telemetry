@@ -99,7 +99,7 @@ The Live page is a grid of cards, three wide and two high, so a whole preset fit
 screen. Every card comes in a **glance** size (one cell) and a **full** size (two cells wide):
 the last corner with its speed, balance and throttle and brake strips, your line and steering
 through it against your best run, a grip circle showing how much of the car's grip you used
-through it, how you used the brake and throttle, how the brake and throttle traded off
+through it, how you used the brake and throttle and where a wheel locked, how the brake and throttle traded off
 against the steering (trail braking), the next corner, corner-by-corner time, live
 balance, grip events, delta, lap trend, car status and the track map. Start from the Focus, Optimisation and Full presets,
 then choose **Edit layout** to add, resize or swap cards and save your own. Press

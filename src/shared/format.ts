@@ -1,4 +1,6 @@
+import type { Wheel } from './analysis/chassis.ts';
 import type { CoachTip, TipKind } from './analysis/coach.ts';
+import type { LiveEvent } from './model/types.ts';
 import type { SessionState } from './protocol/constants.ts';
 
 export type SpeedUnit = 'kmh' | 'mph';
@@ -143,6 +145,93 @@ const SHORT_ACTIONS: Record<TipKind, string> = {
 /** Two or three words, for reading at a glance while driving. */
 export function shortAction(kind: TipKind): string {
   return SHORT_ACTIONS[kind];
+}
+
+const WHEEL_ORDER: Wheel[] = ['FL', 'FR', 'RL', 'RR'];
+
+/** Lock-ups this close together, such as both fronts at once, read as one moment, metres. */
+const LOCK_UP_GAP = 5;
+/** A lock-up this deep means the wheel stopped turning. */
+const FULLY_LOCKED = -0.9;
+
+/** One moment the brakes locked: one or more wheels, over one stretch of track. */
+export interface LockUpMoment {
+  /** In FL, FR, RL, RR order. */
+  wheels: Wheel[];
+  from: number;
+  until: number;
+  /** Longest single lock-up in it, seconds. */
+  duration: number;
+  /** Deepest slip: −1 is a wheel that stopped turning. */
+  peak: number;
+}
+
+/** The lock-ups among these events, grouped into moments along the track. */
+export function lockUpMoments(events: readonly LiveEvent[]): LockUpMoment[] {
+  const moments: LockUpMoment[] = [];
+  const lockUps = events.filter((e) => e.kind === 'lock-up').sort((a, b) => a.distance - b.distance);
+  for (const e of lockUps) {
+    const last = moments.at(-1);
+    if (last && e.distance <= last.until + LOCK_UP_GAP) {
+      last.until = Math.max(last.until, e.until);
+      last.duration = Math.max(last.duration, e.duration);
+      last.peak = Math.min(last.peak, e.peak);
+      if (e.wheel && !last.wheels.includes(e.wheel)) last.wheels.push(e.wheel);
+    } else {
+      moments.push({
+        wheels: e.wheel ? [e.wheel] : [],
+        from: e.distance,
+        until: Math.max(e.distance, e.until),
+        duration: e.duration,
+        peak: e.peak,
+      });
+    }
+  }
+  for (const m of moments) m.wheels.sort((a, b) => WHEEL_ORDER.indexOf(a) - WHEEL_ORDER.indexOf(b));
+  return moments;
+}
+
+function listWords(words: string[]): string {
+  return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
+/** "front left", "both fronts", "front left and rear right", "all four wheels". */
+export function wheelsInWords(wheels: readonly Wheel[]): string {
+  const has = (w: Wheel) => wheels.includes(w);
+  if (WHEEL_ORDER.every(has)) return 'all four wheels';
+  const words: string[] = [];
+  for (const [left, right, both, leftWord, rightWord] of [
+    ['FL', 'FR', 'both fronts', 'front left', 'front right'],
+    ['RL', 'RR', 'both rears', 'rear left', 'rear right'],
+  ] as const) {
+    if (has(left) && has(right)) words.push(both);
+    else if (has(left)) words.push(leftWord);
+    else if (has(right)) words.push(rightWord);
+  }
+  return words.length ? listWords(words) : 'a wheel';
+}
+
+/** "40 m before the apex", rounded to 10 m so it reads at a glance. */
+export function whereInCorner(distance: number, apex: number): string {
+  const before = Math.round((apex - distance) / 10) * 10;
+  if (before === 0) return 'at the apex';
+  return before > 0 ? `${before} m before the apex` : `${-before} m after the apex`;
+}
+
+/** "Lock-up: front left, 0.3 s, 40 m before the apex". Null when nothing locked. */
+export function describeLockUps(moments: readonly LockUpMoment[], apex: number): TipText | null {
+  if (moments.length === 0) return null;
+  const wheels = wheelsInWords([...new Set(moments.flatMap((m) => m.wheels))]);
+  const longest = Math.max(...moments.map((m) => m.duration));
+  const time = longest < 0.1 ? 'under 0.1 s' : `${longest.toFixed(1)} s`;
+  const stopped = moments.some((m) => m.peak <= FULLY_LOCKED) ? 'fully locked' : null;
+  const where = whereInCorner(moments[0].from, apex);
+  const parts =
+    moments.length === 1 ? [wheels, stopped, time, where] : [wheels, stopped, `longest ${time}`, `first ${where}`];
+  return {
+    title: moments.length === 1 ? 'Lock-up' : `${moments.length} lock-ups`,
+    detail: parts.filter((p): p is string => p !== null).join(', '),
+  };
 }
 
 /** +18% / −7%, with a true minus sign. */

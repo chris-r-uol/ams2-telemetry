@@ -93,6 +93,8 @@ export interface ChassisEvent {
   kind: ChassisEventKind;
   lap: number;
   distance: number;
+  /** Where it ended, metres. */
+  until: number;
   corner: string | null;
   wheel: Wheel | null;
   duration: number;
@@ -869,6 +871,7 @@ function detectEvents(
       kind,
       lap: dl.lap.lap,
       distance: dl.d[start],
+      until: dl.d[end],
       corner: cornerAt(corners, dl.d[start])?.name ?? null,
       wheel: wheel === null ? null : WHEELS[wheel],
       duration: dl.t[end] - dl.t[start] + 1 / sampleRate,
