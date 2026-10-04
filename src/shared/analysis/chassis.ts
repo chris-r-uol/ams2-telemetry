@@ -984,9 +984,18 @@ function histogram(values: number[]): DamperHistogram | null {
   };
 }
 
-export function analyseChassis(allLaps: ChassisLap[], corners: Corner[]): ChassisAnalysis {
+/**
+ * `calibrated` measures these laps against a calibration from more of them, as when one
+ * stint is set against the whole session: the steering the car usually needs is then the
+ * same yardstick for every stint, so a setup that pushes more reads as more understeer.
+ */
+export function analyseChassis(
+  allLaps: ChassisLap[],
+  corners: Corner[],
+  calibrated?: { availability: ChannelAvailability; calibration: ChassisCalibration },
+): ChassisAnalysis {
   const laps = allLaps.filter((l) => l.trace.t.length > 50 && l.summary.kind !== 'partial');
-  const { availability, calibration } = calibrate(laps);
+  const { availability, calibration } = calibrated ?? calibrate(laps);
   const sampleRate = calibration.sampleRate ?? 60;
   const derived = laps.map((lap) => deriveLap(lap, availability, calibration));
 

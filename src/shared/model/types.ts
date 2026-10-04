@@ -103,6 +103,11 @@ export interface SessionMeta {
   driver: string;
   sessionType: SessionState;
   laps: LapSummary[];
+  /**
+   * What you changed before each stint, in your own words. Keyed by the position in `laps`
+   * of the stint's first lap, which stays put as more laps are added.
+   */
+  stintNotes?: Record<string, string>;
 }
 
 export interface StoredLap {

@@ -224,6 +224,24 @@ in the same phase. The suggestions follow common setup practice:
 Every car responds differently. **Change one thing at a time**, drive a few laps, and use
 **Compare with another setup** to see what actually moved.
 
+## Stints: one setup against another
+
+A session splits into [stints](how-coaching-works.md#10-stints-one-setup-against-another) at
+every visit to the pits or garage, which is where a setup changes. Pick a **Stint** at the top
+of the page and everything on it covers those laps only. **Compare with another setup** then
+offers the session's other stints as well as other sessions at the track.
+
+A stint is measured on the whole session's yardsticks, not its own:
+
+- the same corners, found on the session's best lap, so T4 is the same corner in every stint;
+- the steering the car usually needs, calibrated over every lap of the session. Calibrated
+  on its own laps, a stint that pushed more would simply look normal for itself; against
+  the session, it reads as more understeer;
+- the grip the car has shown at each speed across the session, so a setup with more grip
+  uses more of the circle.
+
+Hints still need a pattern to repeat within the stint, so a short stint gives fewer of them.
+
 ## Checking it against your car
 
 AMS2's UDP output doesn't document every unit and direction, which is why they're detected

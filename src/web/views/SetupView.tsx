@@ -18,11 +18,13 @@ import type { Corner } from '../../shared/analysis/corners.ts';
 import { PEDAL_PHASES, type PedalPhase, type SpeedBand } from '../../shared/analysis/chassis.ts';
 import type { GearingAnalysis } from '../../shared/analysis/gearing.ts';
 import type { CornerGripSummary, GripEnvelope } from '../../shared/analysis/grip.ts';
+import { summariseStints } from '../../shared/analysis/stints.ts';
 import type { TrackUseAnalysis, TrackUseZone } from '../../shared/analysis/track-use.ts';
-import { formatLapTime, speedIn, speedLabel, type Units } from '../../shared/format.ts';
+import { formatLapTime, signedPercent, speedIn, speedLabel, type Units } from '../../shared/format.ts';
 import type { SessionMeta } from '../../shared/model/types.ts';
 import { DamperHistogramChart } from '../components/DamperHistogram.tsx';
 import { bestLap, formatSessionDate, sessionTitle } from '../components/laps.tsx';
+import { lapRange, stintName, stintTitle } from '../components/Stints.tsx';
 import { describeGap, GripDetail, percent as gripPercent } from '../cards/GripCard.tsx';
 import { TraceStack, type TraceMarker, type TracePanel } from '../components/TraceStack.tsx';
 import { Card, EmptyState, Stat } from '../components/ui.tsx';
@@ -70,6 +72,8 @@ const perG = (metres: number | null | undefined) =>
   metres === null || metres === undefined ? '–' : `${(metres * 1000).toFixed(1)} mm/g`;
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 const whole = (v: number) => `${Math.round(v)}`;
+/** Steering this far from what the car needs counts as understeer or oversteer: the same ±12% the analysis uses. */
+const CHASSIS_BALANCE = 0.12;
 
 function toMarkers(events: ChassisEvent[], kinds: ChassisEventKind[]): TraceMarker[] {
   return events
@@ -112,7 +116,10 @@ export function SetupView({ route }: { route: SetupRoute }) {
   const session = list.find((s) => s.id === route.session) ?? list[0] ?? null;
   const isLive = session !== null && session.id === liveId;
   const refresh = isLive ? lapSerial : 0;
-  const chassis = useApi<ChassisDto>(session ? api.chassis(session.id) : null, refresh);
+  // One stint of the session, or all of it. A setup change happens between stints.
+  const stints = session ? summariseStints(session.laps) : [];
+  const stint = stints.find((s) => s.id === route.stint) ?? null;
+  const chassis = useApi<ChassisDto>(session ? api.chassis(session.id, stint?.id) : null, refresh);
   const sameTrack = session
     ? list.filter(
         (s) =>
@@ -121,15 +128,23 @@ export function SetupView({ route }: { route: SetupRoute }) {
           s.track.variation === session.track.variation,
       )
     : [];
-  const other = sameTrack.find((s) => s.id === route.compare) ?? null;
-  const otherChassis = useApi<ChassisDto>(other ? api.chassis(other.id) : null);
-  const timed = session?.laps.filter((l) => l.lapTime !== null) ?? [];
-  const lap = route.lap ?? bestLap(session)?.lap ?? timed.at(-1)?.lap ?? null;
+  // The other setup: another stint of this session, or another session at this track.
+  const compareHere = session !== null && route.compare === session.id;
+  const otherStint = compareHere ? (stints.find((s) => s.id === route.compareStint && s.id !== stint?.id) ?? null) : null;
+  const other = compareHere ? (otherStint ? session : null) : (sameTrack.find((s) => s.id === route.compare) ?? null);
+  const otherChassis = useApi<ChassisDto>(other ? api.chassis(other.id, otherStint?.id) : null, otherStint ? refresh : 0);
+  const scopeLaps = session ? (stint ? session.laps.slice(stint.first, stint.last + 1) : session.laps) : [];
+  const timed = scopeLaps.filter((l) => l.lapTime !== null);
+  const lap =
+    (timed.some((l) => l.lap === route.lap) ? route.lap : null) ??
+    (stint ? stint.bestLap?.lap : bestLap(session)?.lap) ??
+    timed.at(-1)?.lap ??
+    null;
   const series = useApi<ChassisLapSeries>(session && lap !== null ? api.chassisLap(session.id, lap) : null, refresh);
-  const grip = useApi<GripDto>(session ? api.grip(session.id) : null, refresh);
-  const gearing = useApi<GearingAnalysis>(session ? api.gearing(session.id) : null, refresh);
-  const trackUse = useApi<TrackUseAnalysis>(session ? api.trackUse(session.id) : null, refresh);
-  const gripLap = useApi<GripLapDto>(session && lap !== null ? api.gripLap(session.id, lap) : null, refresh);
+  const grip = useApi<GripDto>(session ? api.grip(session.id, stint?.id) : null, refresh);
+  const gearing = useApi<GearingAnalysis>(session ? api.gearing(session.id, stint?.id) : null, refresh);
+  const trackUse = useApi<TrackUseAnalysis>(session ? api.trackUse(session.id, stint?.id) : null, refresh);
+  const gripLap = useApi<GripLapDto>(session && lap !== null ? api.gripLap(session.id, lap, stint?.id) : null, refresh);
 
   if (sessions.error) {
     return (
@@ -154,8 +169,33 @@ export function SetupView({ route }: { route: SetupRoute }) {
   }
 
   const go = (patch: Partial<SetupRoute>) =>
-    navigate({ name: 'setup', session: session.id, lap, compare: other?.id ?? null, ...patch });
+    navigate({
+      name: 'setup',
+      session: session.id,
+      lap,
+      compare: other?.id ?? null,
+      stint: stint?.id ?? null,
+      compareStint: otherStint?.id ?? null,
+      ...patch,
+    });
   const analysis = chassis.data?.analysis ?? null;
+  const otherAnalysis = otherChassis.data?.analysis ?? null;
+  const comparison: SetupComparison | null =
+    other && otherAnalysis
+      ? {
+          analysis: otherAnalysis,
+          here: {
+            label: stint ? stintName(stint) : 'This session',
+            best: stint ? (stint.bestLap?.time ?? null) : (bestLap(session)?.lapTime ?? null),
+            typical: stint?.typicalLap ?? null,
+          },
+          there: {
+            label: otherStint ? stintName(otherStint) : formatSessionDate(other.startedAt),
+            best: otherStint ? (otherStint.bestLap?.time ?? null) : (bestLap(other)?.lapTime ?? null),
+            typical: otherStint?.typicalLap ?? null,
+          },
+        }
+      : null;
 
   return (
     <div className="page">
@@ -167,7 +207,10 @@ export function SetupView({ route }: { route: SetupRoute }) {
             {isLive && <span className="badge badge-good">Live</span>}
           </p>
           <h1>Car setup</h1>
-          <p className="secondary">{sessionTitle(session)}</p>
+          <p className="secondary">
+            {sessionTitle(session)}
+            {stint && ` · ${stintTitle(session, stint)}`}
+          </p>
         </div>
       </header>
 
@@ -176,8 +219,24 @@ export function SetupView({ route }: { route: SetupRoute }) {
           label="Session"
           value={session.id}
           options={list.map((s) => ({ value: s.id, label: `${sessionTitle(s)} · ${formatSessionDate(s.startedAt)}` }))}
-          onChange={(id) => go({ session: id, lap: null, compare: null })}
+          onChange={(id) => go({ session: id, lap: null, compare: null, stint: null, compareStint: null })}
         />
+        {stints.length > 1 && (
+          <Picker
+            label="Stint"
+            value={String(stint?.id ?? '')}
+            options={[
+              { value: '', label: 'Whole session' },
+              ...stints.map((s) => ({ value: String(s.id), label: stintTitle(session, s) })),
+            ]}
+            onChange={(value) => {
+              const next = value ? Number(value) : null;
+              // A stint can't be set against itself.
+              const clash = next !== null && otherStint?.id === next;
+              go({ stint: next, lap: null, ...(clash ? { compare: null, compareStint: null } : {}) });
+            }}
+          />
+        )}
         <Picker
           label="Lap to plot"
           value={String(lap ?? '')}
@@ -186,14 +245,27 @@ export function SetupView({ route }: { route: SetupRoute }) {
         />
         <Picker
           label="Compare with another setup"
-          value={other?.id ?? ''}
+          value={otherStint ? `stint:${otherStint.id}` : (other?.id ?? '')}
           options={[
-            { value: '', label: sameTrack.length ? 'None' : 'No other sessions at this track' },
+            { value: '', label: sameTrack.length || stints.length > 1 ? 'None' : 'No other sessions at this track' },
+            ...stints
+              .filter((s) => stints.length > 1 && s.id !== stint?.id)
+              .map((s) => ({ value: `stint:${s.id}`, label: `This session · ${stintTitle(session, s)}` })),
             ...sameTrack.map((s) => ({ value: s.id, label: `${formatSessionDate(s.startedAt)}${s.car ? ` · ${s.car}` : ''}` })),
           ]}
-          onChange={(value) => go({ compare: value || null })}
+          onChange={(value) =>
+            value.startsWith('stint:')
+              ? go({ compare: session.id, compareStint: Number(value.slice(6)) })
+              : go({ compare: value || null, compareStint: null })
+          }
         />
       </div>
+      {stint && (
+        <p className="muted scope-note">
+          Everything below is {stintName(stint).toLowerCase()} only ({lapRange(stint)}), measured against the whole session: the same
+          corners, the steering the car usually needs and the grip it has shown. So a stint that pushes more reads as more understeer.
+        </p>
+      )}
 
       {chassis.error && (
         <p className="error-text" role="alert">
@@ -215,13 +287,26 @@ export function SetupView({ route }: { route: SetupRoute }) {
           gearing={gearing.data}
           trackUse={trackUse.data}
           units={units}
-          session={session}
-          other={other}
-          otherAnalysis={otherChassis.data?.analysis ?? null}
+          comparison={comparison}
         />
       )}
     </div>
   );
+}
+
+/** One side of a setup comparison: a stint or a whole session. */
+interface SetupSide {
+  label: string;
+  best: number | null;
+  /** Stints only. */
+  typical: number | null;
+}
+
+/** The other setup's analysis, and what to call each side. */
+interface SetupComparison {
+  analysis: ChassisAnalysis;
+  here: SetupSide;
+  there: SetupSide;
 }
 
 function SetupBody({
@@ -233,9 +318,7 @@ function SetupBody({
   gearing,
   trackUse,
   units,
-  session,
-  other,
-  otherAnalysis,
+  comparison,
 }: {
   analysis: ChassisAnalysis;
   corners: Corner[];
@@ -245,9 +328,7 @@ function SetupBody({
   gearing: GearingAnalysis | null;
   trackUse: TrackUseAnalysis | null;
   units: Units;
-  session: SessionMeta;
-  other: SessionMeta | null;
-  otherAnalysis: ChassisAnalysis | null;
+  comparison: SetupComparison | null;
 }) {
   if (analysis.lapsAnalysed === 0) {
     return (
@@ -282,8 +363,8 @@ function SetupBody({
       <SuspensionCard analysis={analysis} corners={corners} series={series} />
       <DampersCard analysis={analysis} />
       <PlatformCard analysis={analysis} units={units} />
-      {other && otherAnalysis && (
-        <ComparisonCard analysis={analysis} session={session} other={other} otherAnalysis={otherAnalysis} />
+      {comparison && (
+        <ComparisonCard analysis={analysis} comparison={comparison} />
       )}
     </>
   );
@@ -361,7 +442,7 @@ function HintsCard({ hints }: { hints: SetupHint[] }) {
   return (
     <Card
       title="What the data suggests"
-      description="Patterns from your laps, not guarantees. Change one thing at a time, then compare the sessions."
+      description="Patterns from your laps, not guarantees. Change one thing at a time, then compare the stints."
     >
       {hints.length === 0 ? (
         <p className="muted">Nothing stands out yet. Patterns need a few laps to show up.</p>
@@ -1232,21 +1313,17 @@ function PlatformCard({ analysis, units }: { analysis: ChassisAnalysis; units: U
   );
 }
 
-function ComparisonCard({
-  analysis,
-  session,
-  other,
-  otherAnalysis,
-}: {
-  analysis: ChassisAnalysis;
-  session: SessionMeta;
-  other: SessionMeta;
-  otherAnalysis: ChassisAnalysis;
-}) {
+function ComparisonCard({ analysis, comparison }: { analysis: ChassisAnalysis; comparison: SetupComparison }) {
+  const { analysis: otherAnalysis, here, there } = comparison;
   const perLap = (a: ChassisAnalysis, kind: ChassisEventKind) =>
     a.lapsAnalysed ? a.events.filter((e) => e.kind === kind).length / a.lapsAnalysed : null;
   const corners = (a: ChassisAnalysis, verdict: 'understeer' | 'oversteer') =>
     a.corners.filter((c) => c.mid.verdict === verdict).length;
+  /** Mid-corner balance averaged over the corners: + understeer, − oversteer. */
+  const push = (a: ChassisAnalysis) => {
+    const ratios = a.corners.map((c) => c.mid.ratio).filter((r): r is number => r !== null);
+    return ratios.length ? ratios.reduce((sum, r) => sum + r, 0) / ratios.length : null;
+  };
   const lowest = (a: ChassisAnalysis, wheels: number[]) => {
     const values = wheels.map((w) => a.wheels[w].rideMin).filter((v): v is number => v !== null);
     return values.length ? Math.min(...values) : null;
@@ -1260,12 +1337,17 @@ function ComparisonCard({
     change?: (v: number) => string;
   }
   const rows: Row[] = [
+    { label: 'Best lap', a: here.best, b: there.best, show: formatLapTime, change: (v) => `${v.toFixed(3)} s` },
+    // Whole sessions have no typical lap: that belongs to a stint.
+    ...(here.typical !== null && there.typical !== null
+      ? [{ label: 'Typical lap', a: here.typical, b: there.typical, show: formatLapTime, change: (v: number) => `${v.toFixed(3)} s` }]
+      : []),
     {
-      label: 'Best lap',
-      a: bestLap(session)?.lapTime ?? null,
-      b: bestLap(other)?.lapTime ?? null,
-      show: formatLapTime,
-      change: (v) => `${v.toFixed(3)} s`,
+      label: 'Mid-corner balance, averaged over the corners',
+      a: push(analysis),
+      b: push(otherAnalysis),
+      show: (v) => `${signedPercent(v)} steering${v > CHASSIS_BALANCE ? ' (understeer)' : v < -CHASSIS_BALANCE ? ' (oversteer)' : ''}`,
+      change: (v) => `${Math.round(v * 100)} pts`,
     },
     ...(['bottoming', 'bump-stop', 'wheel-lift', 'lock-up', 'wheelspin', 'oversteer'] as ChassisEventKind[]).map(
       (kind): Row => ({ label: PER_LAP_LABELS[kind], a: perLap(analysis, kind), b: perLap(otherAnalysis, kind), show: (v) => v.toFixed(1) }),
@@ -1300,14 +1382,14 @@ function ComparisonCard({
   ];
 
   return (
-    <Card title="Compared with another setup" description={`This session against ${formatSessionDate(other.startedAt)}`}>
+    <Card title="Compared with another setup" description={`${here.label} against ${there.label}`}>
       <div className="table-wrap">
         <table className="data">
           <thead>
             <tr>
               <th scope="col">Measure</th>
-              <th scope="col" className="num">This session</th>
-              <th scope="col" className="num">{formatSessionDate(other.startedAt)}</th>
+              <th scope="col" className="num">{here.label}</th>
+              <th scope="col" className="num">{there.label}</th>
               <th scope="col" className="num">Difference</th>
             </tr>
           </thead>

@@ -8,6 +8,7 @@ import { liveDelta } from '../shared/analysis/delta.ts';
 import { cornerMetrics, type CornerMetrics } from '../shared/analysis/metrics.ts';
 import { DEFAULT_STEP_METRES, resampleByDistance } from '../shared/analysis/resample.ts';
 import { coachableLaps, mean, type AnalysedLap } from '../shared/analysis/session.ts';
+import { detectStints } from '../shared/analysis/stints.ts';
 import type {
   FuelState,
   LapFeedback,
@@ -52,6 +53,8 @@ export class SessionManager {
   private laps: AnalysedLap[] = [];
   private readonly metricsCache = new Map<AnalysedLap, CornerMetrics[]>();
   private lastTick: Tick | null = null;
+  /** Lap number of the last tick recorded on track. Ticks in the menus don't count: a restart passes through them. */
+  private recordedLap: number | null = null;
   private lookedForAllTimeBest = false;
   private readonly sessionListeners = new Set<SessionListener>();
   private readonly lapListeners = new Set<LapListener>();
@@ -99,6 +102,7 @@ export class SessionManager {
     this.lastFeedback = null;
     this.lookedForAllTimeBest = false;
     this.lastTick = null;
+    this.recordedLap = null;
     for (const listener of this.resetListeners) listener();
   }
 
@@ -192,6 +196,7 @@ export class SessionManager {
     this.builder.trackLength = ctx.track.length;
     const completed = this.builder.push(tick);
     this.lastTick = tick;
+    this.recordedLap = tick.lap;
     if (completed) this.completeLap(completed);
     for (const listener of this.tickListeners) listener(tick);
   }
@@ -219,20 +224,40 @@ export class SessionManager {
     return session;
   }
 
+  /**
+   * What you changed before a stint, in your own words, saved on the session. `first` is the
+   * position of the stint's first lap in the lap list. An empty note removes it.
+   */
+  setStintNote(sessionId: string, first: number, note: string): SessionMeta | null {
+    const live = this.session?.id === sessionId ? this.session : null;
+    const stored = live ?? this.store.get(sessionId);
+    if (!stored || !detectStints(stored.laps).some((stint) => stint.first === first)) return null;
+    const session = live ?? structuredClone(stored);
+    const notes = { ...session.stintNotes };
+    if (note) notes[first] = note;
+    else delete notes[first];
+    session.stintNotes = Object.keys(notes).length ? notes : undefined;
+    this.store.saveSession(session);
+    if (live) this.emitSession();
+    return session;
+  }
+
   private isNewSession(ctx: SessionContext, tick: Tick): boolean {
     const s = this.session;
     if (!s || !ctx.track) return true;
     if (s.track.location !== ctx.track.location || s.track.variation !== ctx.track.variation) return true;
     if (ctx.sessionState !== 'invalid' && s.sessionType !== 'invalid' && ctx.sessionState !== s.sessionType) return true;
     if (ctx.car && s.car && s.carSource === 'game' && ctx.car !== s.car) return true;
-    const last = this.lastTick;
-    return last !== null && tick.lap < last.lap && tick.lap <= 1;
+    // The lap count went back to the start: a restart. Compared with the last lap driven, not the last tick
+    // seen, because a restart goes through the menus, where the count has already been reset.
+    return this.recordedLap !== null && tick.lap < this.recordedLap && tick.lap <= 1;
   }
 
   private startSession(ctx: SessionContext): void {
     const now = Date.now();
     const track = ctx.track!;
     const remembered = ctx.car ? '' : (this.store.preferences.lastCar ?? '');
+    this.recordedLap = null;
     this.builder.reset();
     this.laps = [];
     this.metricsCache.clear();

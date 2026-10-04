@@ -96,7 +96,7 @@ export function App() {
     { section: 'sessions', to: { name: 'sessions' } },
     { section: 'compare', to: { name: 'compare', session: liveSessionId, lap: null, refSession: null, refLap: null } },
     { section: 'coach', to: { name: 'coach', id: liveSessionId } },
-    { section: 'setup', to: { name: 'setup', session: liveSessionId, lap: null, compare: null } },
+    { section: 'setup', to: { name: 'setup', session: liveSessionId, lap: null, compare: null, stint: null, compareStint: null } },
     { section: 'lab', to: { name: 'lab' } },
     { section: 'settings', to: { name: 'settings' } },
   ];

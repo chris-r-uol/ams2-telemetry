@@ -35,6 +35,8 @@ export interface LapPlan {
   grip: number;
   power: number;
   pitExit: boolean;
+  /** How much the setup pushes, as a multiple of the usual understeer. Default 1. */
+  understeer?: number;
   corners: CornerHabit[];
 }
 
@@ -198,7 +200,7 @@ export function computeLap(
     latG[i] = (speed * speed * track.curvature[i]) / G;
     lonG[i] = accel / G;
     // Slow corners push (understeer grows with lateral g); fast corners stay close to neutral.
-    const understeerGradient = speed < 35 ? 0.18 : 0.03;
+    const understeerGradient = (speed < 35 ? 0.18 : 0.03) * (plan.understeer ?? 1);
     steering[i] = Math.max(
       -1,
       Math.min(1, (-(track.curvature[i] * 2.7) / 0.16) * (1 + understeerGradient * Math.abs(latG[i]))),

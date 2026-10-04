@@ -5,6 +5,7 @@ import type { Corner } from '../../shared/analysis/corners.ts';
 import type { CornerGripSummary, GripEnvelope, GripRun } from '../../shared/analysis/grip.ts';
 import type { ResampledLap } from '../../shared/analysis/resample.ts';
 import type { SessionInsights } from '../../shared/analysis/session.ts';
+import type { StintCorner, StintSummary } from '../../shared/analysis/stints.ts';
 import type { LapSummary, SessionMeta, SourceStatus } from '../../shared/model/types.ts';
 
 export interface AnalysedLapDto {
@@ -49,6 +50,17 @@ export interface GripLapDto {
   }[];
 }
 
+/** A stint's pace, plus its ideal lap and how each corner went over its pace laps. */
+export interface StintDto extends StintSummary {
+  idealLapTime: number | null;
+  corners: StintCorner[];
+}
+
+export interface StintsDto {
+  stints: StintDto[];
+  corners: Corner[];
+}
+
 export interface LiveReferenceDto {
   source: 'session' | 'all-time';
   sessionId: string;
@@ -60,11 +72,17 @@ export interface LiveReferenceDto {
 
 export type { CoachTip, SessionMeta, SourceStatus };
 
+/** Narrow an analysis to one stint of the session. No stint means the whole session. */
+const scoped = (path: string, stint?: number | null) => (stint ? `${path}?stint=${stint}` : path);
+
 export const api = {
   sessions: () => '/api/sessions',
   session: (id: string) => `/api/sessions/${encodeURIComponent(id)}`,
   lap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/laps/${lap}`,
   insights: (id: string) => `/api/sessions/${encodeURIComponent(id)}/insights`,
+  stints: (id: string) => `/api/sessions/${encodeURIComponent(id)}/stints`,
+  /** `first` is the position of the stint's first lap in the session's lap list. */
+  stintNote: (id: string, first: number) => `/api/sessions/${encodeURIComponent(id)}/stints/${first}/note`,
   compare: (session: string, lap: number, refSession: string, refLap: number) =>
     `/api/compare?${new URLSearchParams({ session, lap: String(lap), refSession, refLap: String(refLap) })}`,
   liveReference: () => '/api/live/reference',
@@ -78,12 +96,13 @@ export const api = {
   sourceSpeed: () => '/api/source/speed',
   sourcePause: () => '/api/source/pause',
   replay: () => '/api/replay',
-  chassis: (id: string) => `/api/sessions/${encodeURIComponent(id)}/chassis`,
+  chassis: (id: string, stint?: number | null) => scoped(`/api/sessions/${encodeURIComponent(id)}/chassis`, stint),
   chassisLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/chassis/laps/${lap}`,
-  grip: (id: string) => `/api/sessions/${encodeURIComponent(id)}/grip`,
-  gearing: (id: string) => `/api/sessions/${encodeURIComponent(id)}/gearing`,
-  trackUse: (id: string) => `/api/sessions/${encodeURIComponent(id)}/track-use`,
-  gripLap: (id: string, lap: number) => `/api/sessions/${encodeURIComponent(id)}/grip/laps/${lap}`,
+  grip: (id: string, stint?: number | null) => scoped(`/api/sessions/${encodeURIComponent(id)}/grip`, stint),
+  gearing: (id: string, stint?: number | null) => scoped(`/api/sessions/${encodeURIComponent(id)}/gearing`, stint),
+  trackUse: (id: string, stint?: number | null) => scoped(`/api/sessions/${encodeURIComponent(id)}/track-use`, stint),
+  gripLap: (id: string, lap: number, stint?: number | null) =>
+    scoped(`/api/sessions/${encodeURIComponent(id)}/grip/laps/${lap}`, stint),
 };
 
 export async function getJson<T>(path: string, init?: RequestInit): Promise<T> {

@@ -37,6 +37,8 @@ export interface DemoOptions {
   /** Real-time multiplier used by start(). */
   speed?: number;
   tickRate?: number;
+  /** Laps in each stint, the out lap included, before the driver goes back to the garage for another setup. */
+  stintLaps?: number;
 }
 
 type Quad4 = [number, number, number, number];
@@ -97,6 +99,29 @@ const COMPOUND = 'Slick Medium';
 const WHEEL_RADIUS = 0.33;
 const STATIC_TRAVEL = [0.045, 0.045, 0.05, 0.05];
 const MAX_TRAVEL = [0.092, 0.092, 0.1, 0.1];
+const COLD_TYRES = [38, 38, 36, 36];
+const COLD_BRAKES = [120, 120, 100, 100];
+const FULL_TANK = 62;
+
+/** Laps in each of the demo driver's stints, unless told otherwise. The first is the out lap from the garage. */
+const STINT_LAPS = 8;
+
+interface DemoSetup {
+  grip: number;
+  power: number;
+  understeer: number;
+  /** Body roll per g, as a multiple of the first setup's. */
+  roll: number;
+}
+
+/** What the demo driver changes in the garage between stints, so there are setups to compare. */
+const SETUPS: DemoSetup[] = [
+  { grip: 1, power: 1, understeer: 1, roll: 1 },
+  // More wing: quicker through the corners, slower down the straights, and it pushes more.
+  { grip: 1.02, power: 0.94, understeer: 1.5, roll: 1 },
+  // Keeps the wing, with a softer front end and stiffer anti-roll bars: less push, less roll.
+  { grip: 1.025, power: 0.94, understeer: 0.7, roll: 0.8 },
+];
 
 export class DemoSimulator {
   readonly track: DemoTrack;
@@ -108,6 +133,7 @@ export class DemoSimulator {
   private readonly emit: (bytes: Uint8Array) => void;
   private speed: number;
   private readonly tickRate: number;
+  private readonly stintLaps: number;
   private readonly rng: () => number;
   private readonly regionOf: Int16Array;
   private plan: LapPlan;
@@ -122,9 +148,9 @@ export class DemoSimulator {
   private lastLapTime = -1;
   private fastestLapTime = -1;
   private lastSectorTime = -1;
-  private fuel = 62;
-  private readonly tyreTemp = [38, 38, 36, 36];
-  private readonly brakeTemp = [120, 120, 100, 100];
+  private fuel = FULL_TANK;
+  private readonly tyreTemp = [...COLD_TYRES];
+  private readonly brakeTemp = [...COLD_BRAKES];
   private readonly wear = [0, 0, 0, 0];
   private readonly previousTravel = [...STATIC_TRAVEL];
   private packetNumber = 0;
@@ -137,6 +163,7 @@ export class DemoSimulator {
     this.emit = emit;
     this.speed = options.speed ?? 1;
     this.tickRate = options.tickRate ?? 60;
+    this.stintLaps = Math.max(2, options.stintLaps ?? STINT_LAPS);
     this.rng = mulberry32(options.seed ?? 20260913);
     this.track = buildDemoTrack();
     const found = findDemoCorners(this.track);
@@ -229,9 +256,29 @@ export class DemoSimulator {
     this.sectorStart = 0;
     this.invalid = false;
     this.lapIndex++;
+    if (this.lapIndex % this.stintLaps === 0) this.visitGarage();
     this.plan = this.planFor(this.lapIndex);
     this.profile = computeLap(this.track, this.corners, this.regionOf, this.plan);
     this.emitTimeStats();
+  }
+
+  private setupFor(lap: number): DemoSetup {
+    return SETUPS[Math.floor(lap / this.stintLaps) % SETUPS.length];
+  }
+
+  /** The setup the car is running in the current stint. */
+  private get setup(): DemoSetup {
+    return this.setupFor(this.lapIndex);
+  }
+
+  /** Back to the garage for the next setup: fresh tyres, a full tank and cool brakes. */
+  private visitGarage(): void {
+    for (let w = 0; w < 4; w++) {
+      this.tyreTemp[w] = COLD_TYRES[w];
+      this.brakeTemp[w] = COLD_BRAKES[w];
+      this.wear[w] = 0;
+    }
+    this.fuel = FULL_TANK;
   }
 
   private chooseHabitCorners(): DemoHabits {
@@ -277,8 +324,17 @@ export class DemoSimulator {
       coast: 0,
       off: false,
     }));
-    if (lap === 0) {
-      return { grip: 0.84, power: 0.8, pitExit: true, corners: corners.map((c) => ({ ...c, brake: 0.7, apex: 0.94 })) };
+    // Every stint starts with an out lap from the garage, on cold tyres.
+    const stintLap = lap % this.stintLaps;
+    const setup = this.setupFor(lap);
+    if (stintLap === 0) {
+      return {
+        grip: 0.84 * setup.grip,
+        power: 0.8 * setup.power,
+        pitExit: true,
+        understeer: setup.understeer,
+        corners: corners.map((c) => ({ ...c, brake: 0.7, apex: 0.94 })),
+      };
     }
     const set = (index: number, change: Partial<CornerHabit>) => {
       if (index >= 0) Object.assign(corners[index], change);
@@ -290,13 +346,19 @@ export class DemoSimulator {
     set(this.habits.lateThrottle, lap % 3 === 2 ? { throttleDelay: 2, wheelspin: true } : { throttleDelay });
     set(this.habits.slowApex, r() < 0.6 ? { apex: 0.92 + 0.04 * r() } : { apex: 0.998 });
     set(this.habits.coasting, r() < 0.55 ? { coast: 30 + 25 * r() } : {});
-    if (lap === 5) set(this.habits.offTrack, { off: true });
+    if (stintLap === 5) set(this.habits.offTrack, { off: true });
     // Chassis moments for the car setup page.
     if (lap % 2 === 0) set(this.habits.lateBraking, { lockUp: true });
     if (lap % 3 === 1) set(this.habits.coasting, { snap: true });
     if (lap % 2 === 1) set(this.habits.slowApex, { kerb: true });
-    const warm = Math.min(1, lap / 4);
-    return { grip: 0.955 + 0.04 * warm + 0.006 * (r() - 0.5), power: 1, pitExit: false, corners };
+    const warm = Math.min(1, stintLap / 4);
+    return {
+      grip: (0.955 + 0.04 * warm + 0.006 * (r() - 0.5)) * setup.grip,
+      power: setup.power,
+      pitExit: false,
+      understeer: setup.understeer,
+      corners,
+    };
   }
 
   private sampleAt(lapTime: number): Sample {
@@ -365,7 +427,7 @@ export class DemoSimulator {
       const aero = (front ? 2.1e-6 : 1.6e-6) * v * v;
       const pitch = s.lonG < 0 ? (front ? 0.009 : -0.009) * -s.lonG : (front ? -0.004 : 0.007) * s.lonG;
       // Positive latG (left turn) loads the right-hand side.
-      const roll = (front ? 0.01 : 0.008) * s.latG * (left ? -1 : 1);
+      const roll = (front ? 0.01 : 0.008) * this.setup.roll * s.latG * (left ? -1 : 1);
       const kerbHit = kerb ? (inside ? -0.015 : 0.006) : 0;
       const raw = STATIC_TRAVEL[w] + aero + pitch + roll + kerbHit + this.road(s.d - (front ? 0 : 2.7), w);
       return Math.max(0.004, Math.min(MAX_TRAVEL[w], raw));
@@ -382,7 +444,7 @@ export class DemoSimulator {
       vLon: -v * Math.cos(slip),
       vertG: ((this.road(s.d + 1, 0) - 2 * this.road(s.d, 0) + this.road(s.d - 1, 0)) * v * v) / G,
       pitch: 0.0035 * s.lonG,
-      roll: 0.005 * s.latG,
+      roll: 0.005 * this.setup.roll * s.latG,
       travel,
       damper,
       // AMS2's header documents centimetres (the game itself sends metres). The analysis detects either.
@@ -485,7 +547,7 @@ export class DemoSimulator {
             sector: this.sector + 1,
             raceStateIndex: 2,
             lapInvalidated: this.invalid,
-            pitModeIndex: this.lapIndex === 0 && s.d < 260 ? 3 : 0,
+            pitModeIndex: this.plan.pitExit && s.d < 260 ? 3 : 0,
             currentLap: this.lapIndex + 1,
             currentTime: this.lapTime,
             currentSectorTime: this.lapTime - this.sectorStart,

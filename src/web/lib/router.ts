@@ -6,6 +6,7 @@
  *   #/sessions/<id>
  *   #/compare/<session>/<lap>/<refSession>/<refLap>
  *   #/coach/<session>
+ *   #/setup/<session>/<lap>/<compare>/<stint>/<compareStint>
  *   #/settings
  */
 import { useSyncExternalStore } from 'react';
@@ -16,7 +17,16 @@ export type Route =
   | { name: 'session'; id: string }
   | { name: 'compare'; session: string | null; lap: number | null; refSession: string | null; refLap: number | null }
   | { name: 'coach'; id: string | null }
-  | { name: 'setup'; session: string | null; lap: number | null; compare: string | null }
+  | {
+      name: 'setup';
+      session: string | null;
+      lap: number | null;
+      /** Session to compare with. The same session, with `compareStint`, sets one stint against another. */
+      compare: string | null;
+      /** 1-based stint to analyse, or null for the whole session. */
+      stint: number | null;
+      compareStint: number | null;
+    }
   | { name: 'lab' }
   | { name: 'settings' };
 
@@ -38,7 +48,14 @@ export function parseHash(hash: string): Route {
     case 'coach':
       return { name: 'coach', id: parts[1] || null };
     case 'setup':
-      return { name: 'setup', session: parts[1] || null, lap: num(parts[2]), compare: parts[3] || null };
+      return {
+        name: 'setup',
+        session: parts[1] || null,
+        lap: num(parts[2]),
+        compare: parts[3] || null,
+        stint: num(parts[4]),
+        compareStint: num(parts[5]),
+      };
     case 'lab':
       return { name: 'lab' };
     case 'settings':
@@ -65,7 +82,7 @@ export function href(route: Route): string {
     case 'coach':
       return route.id ? `#/coach/${e(route.id)}` : '#/coach';
     case 'setup': {
-      const parts = [route.session, route.lap, route.compare];
+      const parts = [route.session, route.lap, route.compare, route.stint, route.compareStint];
       const filled = parts.slice(0, parts.findLastIndex((p) => p !== null) + 1);
       return `#/setup${filled.map((p) => `/${e(String(p ?? ''))}`).join('')}`;
     }

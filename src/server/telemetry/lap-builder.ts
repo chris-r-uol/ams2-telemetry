@@ -82,6 +82,8 @@ const LEAVING_PITS = new Set(['inPit', 'drivingOutOfPits', 'inGarage', 'drivingO
 // Returning to the garage mid-lap ends the lap in the pits too.
 const ENTERING_PITS = new Set(['drivingIntoPits', 'inPit', 'inGarage']);
 const OFFICIAL_TIME_TOLERANCE = 0.75;
+/** A lap put in the garage this soon after it began is starting there, not ending there, s. */
+const GARAGE_RETURN = 5;
 
 export class LapBuilder {
   trackLength = 0;
@@ -206,7 +208,9 @@ export class LapBuilder {
       lap.startedInPit = LEAVING_PITS.has(tick.pitMode);
       lap.fuelStart = tick.fuelLitres;
     } else if (!lap.startedInPit && ENTERING_PITS.has(tick.pitMode)) {
-      lap.enteredPit = true;
+      // Returning to the garage as a lap begins can take a moment to show: that lap is leaving the garage, not coming in.
+      if (tick.pitMode === 'inGarage' && lap.lastT < GARAGE_RETURN) lap.startedInPit = true;
+      else lap.enteredPit = true;
     }
     lap.invalid ||= tick.lapInvalidated;
 

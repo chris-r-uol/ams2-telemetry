@@ -197,6 +197,55 @@ Steering is smoothed over about 10 m, so a quick correction isn't read as the co
 lock. The analysis lives in
 [`src/shared/analysis/string-theory.ts`](../src/shared/analysis/string-theory.ts).
 
+## 10. Stints: one setup against another
+
+A session is split into **stints**: the runs between visits to the pits or garage. A setup
+change happens in one of those breaks, so setting one stint against another shows what the
+change did, on the same day at the same track.
+
+The breaks are found from the lap list alone, so this works on every saved session. A new
+stint starts at:
+
+| Break | How it's found |
+|---|---|
+| Leaving the pits or garage | an out lap |
+| Coming in | the lap after an in lap |
+| A return to the garage the game didn't label | more than 20 s unaccounted for between two laps, and the next lap on fresher or cooler tyres |
+| A restart | the lap count going back (a restart now starts a new session; older sessions can hold one) |
+
+A pause leaves time unaccounted for too, but the tyres come back as worn and as warm as they
+were, so it isn't a break.
+
+With only three or four laps in a stint, one warm-up lap or one mistake would drag an average
+a long way. So a stint's pace comes from its **pace laps**: the clean laps within 5% of its
+best.
+
+| Figure | Meaning |
+|---|---|
+| Best lap | the fastest clean lap |
+| Typical lap | the median pace lap |
+| Spread | standard deviation of the pace laps |
+| Ideal lap | the stint's best run through every corner, combined |
+| Sectors | median over the pace laps |
+| Top speed, tyre temperature and pressure | median over the clean laps, tyres by wheel |
+| Fuel per lap | median over the flying laps |
+
+The Session page shows the stints side by side, each with the change from the stint before
+(or any stint you choose), bands them on the lap chart with a dashed line at each typical
+lap, and groups the lap list under them. You can note what you changed before each stint;
+the note is saved with the session.
+
+**Corner by corner between stints** takes two stints and gives, for every corner, the median
+time through its segment over the pace laps, the slowest speed and the braking point. Corners
+come from the session's best lap, so they're the same in every stint, and segments tile the
+lap, so the differences add up to about the difference in typical lap. Runs through a corner
+that overlap a spin or contact are left out, as in the habits.
+
+The Car setup page can cover one stint too, and compare it with another:
+[how a stint is measured](car-setup.md#stints-one-setup-against-another).
+
+The analysis lives in [`src/shared/analysis/stints.ts`](../src/shared/analysis/stints.ts).
+
 ## Limitations
 
 - Corners are numbered in the order they're detected (T1, T2, …), which may not match
@@ -204,6 +253,8 @@ lock. The analysis lives in
 - Coaching is relative to you. It finds inconsistency and missed opportunities; it
   can't tell you that everyone else brakes 30 m later.
 - Car setup, fuel load and tyre wear change what's possible between laps.
+- A stint is a few laps. Its typical lap can rest on one or two of them (the page says how
+  many), and track temperature and your own learning change between stints as well as the setup.
 - Grip used is measured against your own best, so it can't show grip you've never used
   anywhere at that speed. Early in a session the limit is still low, and runs can read
   over 100%.

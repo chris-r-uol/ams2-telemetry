@@ -34,6 +34,10 @@ lost time, and exactly what to try on the next one.
   lost and a corner-by-corner breakdown.
 - **Session coaching.** Your ideal lap (your best run through every corner, combined), how far
   your best lap is from it, consistency, and **habits**: mistakes you repeat lap after lap.
+- **Stints: one setup against another.** Every visit to the pits or garage starts a new stint.
+  See each stint's best and typical lap, spread, sectors, top speed, fuel and tyres side by side,
+  with the change from the stint before, corner by corner on the map, and a note of what you
+  changed. The car setup analysis can cover one stint and compare it with another.
 - **Car setup analysis.** Understeer and oversteer through every corner, slip angle,
   lock-ups, wheelspin, suspension travel, ride height, bottoming, bump stops, wheels lifting,
   damper histograms and roll/dive figures, balance at each speed and with each pedal, gearing
@@ -73,8 +77,8 @@ npm run demo
 ```
 
 A simulated driver laps *Coachwood Park* with some very human habits (early braking, a lazy
-throttle, a trip over the grass), so every feature has something to show. This is how the
-project is developed on a Mac.
+throttle, a trip over the grass), and goes back to the garage every eight laps for a different
+setup, so every feature has something to show. This is how the project is developed on a Mac.
 
 ## Tour
 
